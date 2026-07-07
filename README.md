@@ -12,7 +12,7 @@
 |---|---|---|
 | 0. Constitution (원칙) | [docs/constitution.md](docs/constitution.md) | ✅ |
 | 1. Specify (명세) | [docs/spec.md](docs/spec.md) | ✅ 초안 |
-| 2. Clarify (모호성 해소) | spec 내 "미해결" 절 | 🔲 진행 |
+| 2. Clarify (모호성 해소) | spec 내 "미해결" 절 | ✅ 대부분 확정(위치·반경·점심영업·메뉴힌트) — 앱키만 남음 |
 | 3. Plan (기술설계) | [docs/plan.md](docs/plan.md) | ✅ 초안 |
 | 4. Tasks (작업분해) | [docs/tasks.md](docs/tasks.md) | ✅ |
 | 5. Implement (구현) | `index.html` 등 | 🔲 다음 (Kakao 연동) |
@@ -22,6 +22,6 @@
 이 프로젝트에 요청한 프롬프트는 [PROMPTS.md](PROMPTS.md)에 시간순으로 기록한다.
 
 ## 다음 할 일 (구현 전 필요물)
-1. **회사 중심 좌표(위도/경도)와 검색 반경** 확정 (예: 성수 사옥, 500m)
-2. **Kakao Developers JS 앱키** 발급 + 배포 도메인 등록 → `config.js`에 주입
+- 확정됨: 회사 위치(`아차산로13길 11`), 거리(도보 15분≈1km), 점심영업 필터(근사), 메뉴 힌트 방식
+- **남은 유일한 blocker**: **Kakao Developers JS 앱키** 발급 + 배포 도메인(`namsukim8021.github.io`) 등록 → `config.js`에 주입
 자세한 내용은 [docs/tasks.md](docs/tasks.md) 참고.
