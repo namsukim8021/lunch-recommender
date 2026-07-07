@@ -17,10 +17,24 @@
 
 ## 데이터 소스: Kakao Maps JS SDK
 - 로드: `//dapi.kakao.com/v2/maps/sdk.js?appkey={JS_KEY}&libraries=services&autoload=false`
-- 검색: `kakao.maps.services.Places().categorySearch('FD6', cb, { location: LatLng(center), radius, sort:'distance' })`
-  - `FD6` = 음식점 카테고리. 페이지네이션으로 후보 모아 dedupe(`place.id` 기준).
-  - 결과 필드 활용: `place_name`, `category_name`, `distance`, `road_address_name`, `x/y`(경위도), `place_url`.
+- **중심 좌표(주소→좌표)**: 회사 주소 `서울특별시 성동구 아차산로13길 11` 을 `kakao.maps.services.Geocoder().addressSearch(addr, cb)` 로 1회 지오코딩해 CENTER 로 사용(하드코딩 좌표 대신 주소 기준 → 창작 금지 준수). 지오코딩 결과를 config에 캐시해도 됨.
+- 검색: `kakao.maps.services.Places().categorySearch('FD6', cb, { location: LatLng(CENTER), radius: RADIUS, sort:'distance' })`
+  - `FD6` = 음식점 카테고리(카페 CE7 은 애초에 제외됨). 페이지네이션으로 후보 모아 dedupe(`place.id` 기준).
+  - 결과 필드 활용: `place_name`, `category_name`, `distance`(직선 m), `road_address_name`, `x/y`(경위도), `place_url`.
 - **키**: 도메인 제한된 **JS 앱키**만 사용(Kakao Developers에서 배포 도메인 등록). REST 키 미사용 → 정적으로 안전.
+
+## 거리 제한: 도보 15분 (근사)
+- Kakao 는 보행 소요시간을 주지 않고 `radius`/`distance` 는 **직선거리**다. 따라서 도보 15분을 직선거리로 근사한다.
+- 산정: 보행 4km/h ≈ 67m/분 → 15분 ≈ 보행경로 약 1,000m. 도로 우회를 엄격히 반영하려면 직선 반경을 더 줄인다(우회계수 1.3 가정 시 ≈ 770m).
+- **기본값 `RADIUS = 1000`(m)** 로 두되(통상 '도보 15분 ≈ 1km' 직관과 일치), 과다 포함이 느껴지면 config에서 800m 로 낮춘다. 후보는 `distance <= RADIUS` 로 한 번 더 거른다.
+- (정확한 보행시간은 별도 길찾기 API가 필요 → 정적·무료 범위 밖, 도입 시 재검토)
+
+## 점심 영업 필터 (근사 — 영업시간 미제공 한계)
+Kakao 검색은 영업시간을 안 주므로 "점심 영업 중"을 아래로 근사한다:
+1. **음식점(FD6)만** 대상 → 카페(CE7) 자동 제외.
+2. `category_name` 에 **야간 전용 업종 키워드**가 있으면 제외: 예) `술집`, `호프`, `바(BAR)`, `포장마차`, `요리주점`, `이자카야`, `야식`.
+3. (선택·정확) `config.EXCLUDE_PLACE_IDS` / `INCLUDE_PLACE_IDS` 로 수동 제외·강제포함 오버라이드(실제 점심영업 확인분).
+→ 그래도 100% 보장은 불가 → UI에 "영업 여부는 카카오맵에서 확인" 안내 + place_url 링크.
 
 ## 추천 로직 (랜덤 + 최근 안 겹치게)
 1. 반경 내 후보 리스트 수집(dedupe).
@@ -39,9 +53,14 @@
 ```js
 window.LUNCH_CONFIG = {
   KAKAO_JS_KEY: "<도메인 제한 JS 앱키>",
-  CENTER: { lat: 00.000000, lng: 000.000000 }, // 회사 사옥 좌표 — 확정 필요
-  RADIUS: 500,        // m
-  RECENT_LIMIT: 10,   // 최근 제외 개수
+  COMPANY_ADDRESS: "서울특별시 성동구 아차산로13길 11", // Geocoder로 좌표 변환
+  CENTER: null,        // 지오코딩 결과 캐시 시 { lat, lng } 채움(없으면 런타임 지오코딩)
+  WALK_MINUTES: 15,    // 도보 기준(참고값)
+  RADIUS: 1000,        // m, 직선. 도보 15분 근사(엄격히 하려면 800)
+  RECENT_LIMIT: 10,    // 최근 제외 개수
+  EXCLUDE_CATEGORY_KEYWORDS: ["술집","호프","바(BAR)","포장마차","요리주점","이자카야","야식"], // 야간전용 제외(점심영업 근사)
+  EXCLUDE_PLACE_IDS: [], // 수동 제외(실제 점심 미영업 확인분)
+  INCLUDE_PLACE_IDS: [], // 수동 강제포함
 };
 ```
 
