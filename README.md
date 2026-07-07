@@ -7,6 +7,15 @@
 - **추천**: 반경 내 식당 랜덤 1곳, 최근 추천은 제외(localStorage)
 - **호스팅**: GitHub Pages (정적·무료), 백엔드 없음
 
+## Harness 구조 (SDD 3계층 — 사내 위키 정렬)
+| 계층 | 파일 | 하네스 축 |
+|---|---|---|
+| 상시 규약·컨텍스트 | [`CLAUDE.md`](CLAUDE.md) | Constrain·Inform |
+| 명세·설계·원칙 | `docs/spec.md`(SPEC) · `docs/plan.md`(LLD) · `docs/constitution.md` | Inform |
+| 절차 표준화(생성→검증→보완) | `.claude/skills/sdd-cycle` | Verify·Correct |
+
+**운영 원칙**: 코드를 직접 고치지 말고 **스펙을 보완해 재생성** · 스펙(성공기준)을 **검증 oracle**로 사용. 상세는 [CLAUDE.md](CLAUDE.md).
+
 ## SDD 진행 단계
 | Phase | 문서 | 상태 |
 |---|---|---|
