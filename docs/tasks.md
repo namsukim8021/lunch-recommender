@@ -17,8 +17,15 @@
 - [ ] **Kakao Developers JS 앱키** 발급 + 배포 도메인 등록 → `config.js` (남은 유일한 blocker)
 - [ ] "메뉴" 범위 최종 확정(카테고리 수준 위임 vs 큐레이션 DB)
 
+## Phase 4.5 — 오라클 정의 (정답기준)
+- [x] **3층 오라클 문서화**([docs/oracle.md](oracle.md)) — 명세·도메인·바이너리 오라클, 콜드 스타트, 성숙도
+- [x] **도메인 오라클 규칙(D1~D7)** 정의 — 반경·야간제외·중복없음·창작금지·localStorage·키안전·후보0
+- [x] CLAUDE.md·sdd-cycle·README에 3층 오라클 배선
+- [ ] (구현과 함께) **도메인 오라클 자동 점검** — 고정 시드/모의 Kakao 응답에 대량·랜덤 입력 → D1~D7 위반 산출 탐지
+- [ ] (수용 시) **바이너리 오라클 golden 박제** — 모의 응답 기준 〈추천·메뉴힌트·거리표기〉 스냅샷 → 이후 regression 기준
+
 ## Phase 5 — 구현 (다음 세션)
-> 구현은 `.claude/skills/sdd-cycle` 절차를 따른다: **코드 직접 수정 금지**, `spec §6`·`plan 테스트 관점`을 **oracle로 대비 검증**, 불일치 시 **스펙 보완 후 재생성**.
+> 구현은 `.claude/skills/sdd-cycle` 절차를 따른다: **코드 직접 수정 금지**, [`docs/oracle.md`](oracle.md)의 **3층 오라클(명세 AC·도메인 D1~D7·바이너리 golden)로 대비 검증**, 불일치 시 **스펙/규칙 보완 후 재생성**.
 - [ ] 5.1 Walking skeleton: 지도 표시 + 주소 지오코딩(CENTER) — **실패 시 임의 좌표 금지·안내** + 반경 FD6 검색 결과 콘솔
 - [ ] 5.2 후보 수집·dedupe + **`distance <= RADIUS`(도보 15분) 필터**
 - [ ] 5.2b **격자 분할 검색(rect 타일 합집합)** — Kakao 45개 상한 극복(전수 수집)

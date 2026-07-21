@@ -9,14 +9,14 @@
 | 계층 | 파일 | 하네스 축 |
 |---|---|---|
 | 상시 규약·컨텍스트 | **CLAUDE.md**(이 파일) | Constrain · Inform |
-| 명세(무엇)·설계(어떻게)·원칙 | `docs/spec.md`(SPEC) · `docs/plan.md`(LLD) · `docs/constitution.md` | Inform |
+| 명세(무엇)·설계(어떻게)·원칙·**정답기준** | `docs/spec.md`(SPEC) · `docs/plan.md`(LLD) · `docs/constitution.md` · `docs/oracle.md`(3층 오라클) | Inform |
 | 절차 표준화(생성→검증→보완) | `.claude/skills/sdd-cycle` | Verify · Correct |
 
 ## SDD 운영 원칙 (반드시 준수)
 1. **스펙이 1차 산출물.** 기능은 먼저 `docs/spec.md`(무엇)·`docs/plan.md`(어떻게)에 기술한 뒤 생성한다.
 2. **코드를 직접 손보지 말 것.** 결함·변경은 코드가 아니라 **스펙(문서)을 보완한 뒤 재생성**한다(문서 보완 후 재생성 루프).
-3. **스펙 = 검증 oracle.** 생성물은 사람 눈이 아니라 `spec.md §6 성공기준` + `plan.md 테스트 관점` **대비로 판정**한다.
-4. **파이프라인**: LLD(`plan.md`) → SPEC(`spec.md`) → CODE → TEST → VALIDATE.
+3. **정답기준 = 3층 오라클.** 생성물은 사람 눈이 아니라 [`docs/oracle.md`](docs/oracle.md)의 **① 명세 오라클**(`spec §6` AC)·**② 도메인 오라클**(스펙에 없어도 당연한 불변식 D1~D7)·**③ 바이너리 오라클**(golden regression, 수용 후 생성) **대비로 판정**한다. 변경 시 "이 정답은 뭘로 정해졌나(golden/AC/도메인규칙)"를 먼저 답한다.
+4. **파이프라인**: LLD(`plan.md`) → SPEC(`spec.md`) → CODE → TEST → **VALIDATE(3층 오라클 대비)**.
 
 ## 하드 제약 (constitution.md 요약)
 - 정적·무료(GitHub Pages), **백엔드 없음**. 개인정보는 **localStorage만**, 서버 저장/계정 없음.

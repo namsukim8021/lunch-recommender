@@ -17,4 +17,6 @@
 
 | 7 | 2026-07-08 | 사내 위키(SDD 기초)대로 진행되는지 검토 후 "보완 진행해줘". | Harness 3계층 정렬: `CLAUDE.md`(상시 규약·Constrain/Inform) + `.claude/skills/sdd-cycle`(Verify·Correct 절차) 추가, 운영원칙(코드 직접수정 금지·스펙=oracle) 명문화, README/tasks 반영 |
 
+| 8 | 2026-07-22 | 스터디 3회차(오라클 프레임워크: 바이너리/명세/도메인 오라클, 콜드 스타트) 발표자료 내용을 이 레포에 반영해줘. | `docs/oracle.md` 신설(3층 오라클·도메인 규칙 D1~D7·콜드 스타트·성숙도) + CLAUDE.md 검증원칙을 3층 오라클로 확장 + `sdd-cycle` VERIFY/CORRECT 단계 배선 + README/tasks 갱신. 현 오라클 성숙도 L0→L1(구현 수용 시 L2 목표) |
+
 <!-- 다음 요청부터 아래에 이어서 기록 -->
