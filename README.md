@@ -11,10 +11,22 @@
 | 계층 | 파일 | 하네스 축 |
 |---|---|---|
 | 상시 규약·컨텍스트 | [`CLAUDE.md`](CLAUDE.md) | Constrain·Inform |
-| 명세·설계·원칙 | `docs/spec.md`(SPEC) · `docs/plan.md`(LLD) · `docs/constitution.md` | Inform |
+| 명세·설계·원칙·**정답기준** | `docs/spec.md`(SPEC) · `docs/plan.md`(LLD) · `docs/constitution.md` · [`docs/oracle.md`](docs/oracle.md)(3층 오라클) | Inform |
 | 절차 표준화(생성→검증→보완) | `.claude/skills/sdd-cycle` | Verify·Correct |
 
-**운영 원칙**: 코드를 직접 고치지 말고 **스펙을 보완해 재생성** · 스펙(성공기준)을 **검증 oracle**로 사용. 상세는 [CLAUDE.md](CLAUDE.md).
+**운영 원칙**: 코드를 직접 고치지 말고 **스펙을 보완해 재생성** · 생성물은 **3층 오라클**(명세·도메인·바이너리)로 판정. 상세는 [CLAUDE.md](CLAUDE.md) · [docs/oracle.md](docs/oracle.md).
+
+## 무엇이 정답인가 — 3층 오라클 ([docs/oracle.md](docs/oracle.md))
+"스펙대로 만들었나"에 더해 "**이 결과가 맞는지 뭘로 판정하나**"를 정의한다.
+| 오라클 | 질문 | 이 레포에서 | 상태 |
+|---|---|---|---|
+| 명세 | "스펙대로인가?" | `spec §6` AC (전량 미러) | 📝 판정기준 확립(통과 코드는 Phase 5) |
+| 도메인 | "상식적으로 맞나?" | 반경·야간제외·중복없음·창작금지·키안전·격자피복·좌표날조금지 등 불변식 D1~D9 | 📝 규칙 정의 · ⏳ 자동점검 미구현(Phase 5) |
+| 바이너리 | "이전과 같나?" | 수용 시 golden 스냅샷 → 이후 regression | 🔲 콜드 스타트(구현 수용 후 생성) |
+
+<sub>상태 범례: 📝 규칙/기준 정의됨(문서) · ⏳ 자동 점검 미구현(Phase 5) · 🔲 미생성. (아래 "SDD 진행 단계"의 ✅/🔲와는 별개 — 그건 Phase 완료 여부)</sub>
+
+**오라클 성숙도**(명세-우선 재정의): 현재 **L1**(명세 판정기준 확립 · 도메인 규칙 정의 · 바이너리 콜드 스타트) → 구현 **수용** 시 **L2**(명세+바이너리) → L3(3층+자동진화). 상세 [docs/oracle.md](docs/oracle.md).
 
 ## SDD 진행 단계
 | Phase | 문서 | 상태 |
