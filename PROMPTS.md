@@ -21,4 +21,6 @@
 
 | 9 | 2026-07-22 | (오라클 PR 자체 리뷰) "자체 리뷰를 통해 개선할 부분 있다면 코멘트 남겨줘" → 이어 반영 진행. | 프레시 콜드 리뷰 후 반영: 성숙도 사다리를 **명세-우선**으로 재정의(현재 L1)·상태표기 ✅→3단계(📝/⏳/🔲)·golden **결정성 전제**(주입가능 PRNG, plan.md 설계 불변식)·**D8/D9 추가**(격자 피복·좌표 날조 금지)·D3를 측정가능하게 조임·UI/UX는 시각 스냅샷 오라클로 라우팅·"사람 눈 금지"를 회귀 한정으로 조건화·파이프라인 SPEC→LLD 정정 |
 
+| 10 | 2026-08-12 | 스터디 4회차(검증 트랙 5종: Regression/Migration/Extension/Signal/Probabilistic + BluePill·Shadow Diff) 발표자료 내용을 고려해 이 레포도 개선하고 PR 생성해줘. | `docs/tracks.md` 신설(트랙 5종 ↔ 이 프로젝트, 트랙별 **선행 조건**과 현재 가부) + 갭 2건 반영: **Signal 관측점 부재** → plan.md 계측 설계(`elapsedMs`·`searchCalls`·`candidateCount`) · **Probabilistic 요구 부재** → spec §4·§6 분포 요구 + 도메인 **D10**(쏠림 없음). oracle.md 판정표에 트랙 열·미러 동기화, CLAUDE.md·sdd-cycle에 "트랙 선택" 단계, tasks Phase 4.6 신설 + 5.4/5.9에 선행 조건 명시 |
+
 <!-- 다음 요청부터 아래에 이어서 기록 -->
