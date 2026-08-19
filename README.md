@@ -11,20 +11,34 @@
 | 계층 | 파일 | 하네스 축 |
 |---|---|---|
 | 상시 규약·컨텍스트 | [`CLAUDE.md`](CLAUDE.md) | Constrain·Inform |
-| 명세·설계·원칙·**정답기준** | `docs/spec.md`(SPEC) · `docs/plan.md`(LLD) · `docs/constitution.md` · [`docs/oracle.md`](docs/oracle.md)(3층 오라클) | Inform |
+| 명세·설계·원칙·**정답기준**·**판정방법** | `docs/spec.md`(SPEC) · `docs/plan.md`(LLD) · `docs/constitution.md` · [`docs/oracle.md`](docs/oracle.md)(3층 오라클) · [`docs/tracks.md`](docs/tracks.md)(검증 트랙 5종) | Inform |
 | 절차 표준화(생성→검증→보완) | `.claude/skills/sdd-cycle` | Verify·Correct |
 
-**운영 원칙**: 코드를 직접 고치지 말고 **스펙을 보완해 재생성** · 생성물은 **3층 오라클**(명세·도메인·바이너리)로 판정. 상세는 [CLAUDE.md](CLAUDE.md) · [docs/oracle.md](docs/oracle.md).
+**운영 원칙**: 코드를 직접 고치지 말고 **스펙을 보완해 재생성** · 생성물은 **3층 오라클**(명세·도메인·바이너리)로 판정하되, **어느 트랙으로 판정할지 착수 전에 정한다**. 상세는 [CLAUDE.md](CLAUDE.md) · [docs/oracle.md](docs/oracle.md) · [docs/tracks.md](docs/tracks.md).
 
 ## 무엇이 정답인가 — 3층 오라클 ([docs/oracle.md](docs/oracle.md))
 "스펙대로 만들었나"에 더해 "**이 결과가 맞는지 뭘로 판정하나**"를 정의한다.
 | 오라클 | 질문 | 이 레포에서 | 상태 |
 |---|---|---|---|
 | 명세 | "스펙대로인가?" | `spec §6` AC (전량 미러) | 📝 판정기준 확립(통과 코드는 Phase 5) |
-| 도메인 | "상식적으로 맞나?" | 반경·야간제외·중복없음·창작금지·키안전·격자피복·좌표날조금지 등 불변식 D1~D9 | 📝 규칙 정의 · ⏳ 자동점검 미구현(Phase 5) |
+| 도메인 | "상식적으로 맞나?" | 반경·야간제외·중복없음·창작금지·키안전·격자피복·좌표날조금지 등 불변식 D1~D10 | 📝 규칙 정의 · ⏳ 자동점검 미구현(Phase 5) |
 | 바이너리 | "이전과 같나?" | 수용 시 golden 스냅샷 → 이후 regression | 🔲 콜드 스타트(구현 수용 후 생성) |
 
 <sub>상태 범례: 📝 규칙/기준 정의됨(문서) · ⏳ 자동 점검 미구현(Phase 5) · 🔲 미생성. (아래 "SDD 진행 단계"의 ✅/🔲와는 별개 — 그건 Phase 완료 여부)</sub>
+
+## 어떻게 판정하나 — 검증 트랙 5종 ([docs/tracks.md](docs/tracks.md))
+오라클이 "정답의 출처"라면, 트랙은 "그 정답과 **언제 무엇을 비교하는가**"다. **트랙은 다 만든 뒤 고르는 메뉴가 아니라 코드를 쓰기 전으로 거슬러 오는 설계 제약**이다.
+| 트랙 | 비교 | 이 레포에서 | 상태 |
+|---|---|---|---|
+| Extension | A + α vs Spec | `spec §6` AC + 도메인 D1~D10 | 📝 기준 확립(실행은 Phase 5) |
+| Regression | A vs A′ | 수용 시 golden 박제 | 🔲 콜드 스타트 |
+| Probabilistic | P(A) ≈ P(A′) | 추천 분포 쏠림 없음(D10) | 🔲 미착수 |
+| Signal | σ(A) vs σ(A′) | `elapsedMs`·`searchCalls`·`candidateCount` 계측 | 🔲 미착수 |
+| Migration | A vs B | 지도 SDK 교체 시 발동 | ➖ 해당 없음 |
+
+<sub>범례: 📝 기준 정의됨 · ⏳ 자동 점검 미구현 · 🔲 미생성 · ➖ 해당 없음</sub>
+
+> **Regression·Probabilistic은 "난수원 주입"이라는 설계 결정 하나에 함께 걸려 있고, Signal은 계측 코드가 없으면 열리지 않는다.** 그래서 Phase 5 첫 구현에 ①난수원 주입 ②계측을 반드시 함께 넣는다.
 
 **오라클 성숙도**(명세-우선 재정의): 현재 **L1**(명세 판정기준 확립 · 도메인 규칙 정의 · 바이너리 콜드 스타트) → 구현 **수용** 시 **L2**(명세+바이너리) → L3(3층+자동진화). 상세 [docs/oracle.md](docs/oracle.md).
 
@@ -36,6 +50,8 @@
 | 2. Clarify (모호성 해소) | spec 내 "미해결" 절 | ✅ 대부분 확정(위치·반경·점심영업·메뉴힌트) — 앱키만 남음 |
 | 3. Plan (기술설계) | [docs/plan.md](docs/plan.md) | ✅ 초안 |
 | 4. Tasks (작업분해) | [docs/tasks.md](docs/tasks.md) | ✅ |
+| 4.5 Oracle (정답기준) | [docs/oracle.md](docs/oracle.md) | ✅ 문서 (자동점검은 Phase 5) |
+| 4.6 Tracks (판정방법) | [docs/tracks.md](docs/tracks.md) | ✅ 문서 (판정기는 Phase 5) |
 | 5. Implement (구현) | `index.html` 등 | 🔲 다음 (Kakao 연동) |
 | 6. Deploy | GitHub Pages | 🔲 |
 

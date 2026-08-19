@@ -9,14 +9,15 @@
 | 계층 | 파일 | 하네스 축 |
 |---|---|---|
 | 상시 규약·컨텍스트 | **CLAUDE.md**(이 파일) | Constrain · Inform |
-| 명세(무엇)·설계(어떻게)·원칙·**정답기준** | `docs/spec.md`(SPEC) · `docs/plan.md`(LLD) · `docs/constitution.md` · `docs/oracle.md`(3층 오라클) | Inform |
+| 명세(무엇)·설계(어떻게)·원칙·**정답기준**·**판정방법** | `docs/spec.md`(SPEC) · `docs/plan.md`(LLD) · `docs/constitution.md` · `docs/oracle.md`(3층 오라클) · `docs/tracks.md`(검증 트랙 5종) | Inform |
 | 절차 표준화(생성→검증→보완) | `.claude/skills/sdd-cycle` | Verify · Correct |
 
 ## SDD 운영 원칙 (반드시 준수)
 1. **스펙이 1차 산출물.** 기능은 먼저 `docs/spec.md`(무엇)·`docs/plan.md`(어떻게)에 기술한 뒤 생성한다.
 2. **코드를 직접 손보지 말 것.** 결함·변경은 코드가 아니라 **스펙(문서)을 보완한 뒤 재생성**한다(문서 보완 후 재생성 루프).
-3. **정답기준 = 3층 오라클.** 생성물은 (회귀·재검증 기준으로) 사람 눈이 아니라 [`docs/oracle.md`](docs/oracle.md)의 **① 명세 오라클**(`spec §6` AC)·**② 도메인 오라클**(스펙에 없어도 당연한 불변식 D1~D9)·**③ 바이너리 오라클**(golden regression, 수용 후 생성) **대비로 판정**한다(최초 수용 1회는 사람 판단 허용 — oracle.md §2). 변경 시 "이 정답은 뭘로 정해졌나(golden/AC/도메인규칙)"를 먼저 답한다.
-4. **파이프라인**(스펙 우선): SPEC(`spec.md`) → LLD(`plan.md`) → CODE → TEST → **VALIDATE(3층 오라클 대비)**.
+3. **정답기준 = 3층 오라클.** 생성물은 (회귀·재검증 기준으로) 사람 눈이 아니라 [`docs/oracle.md`](docs/oracle.md)의 **① 명세 오라클**(`spec §6` AC)·**② 도메인 오라클**(스펙에 없어도 당연한 불변식 D1~D10)·**③ 바이너리 오라클**(golden regression, 수용 후 생성) **대비로 판정**한다(최초 수용 1회는 사람 판단 허용 — oracle.md §2). 변경 시 "이 정답은 뭘로 정해졌나(golden/AC/도메인규칙)"를 먼저 답한다.
+4. **판정 방법 = 검증 트랙.** 오라클이 "무엇이 정답인가"라면 [`docs/tracks.md`](docs/tracks.md)는 "그 정답과 **언제 무엇을 비교하는가**"다. 변경 착수 전 **어느 트랙으로 판정할지 먼저 정한다** — 트랙마다 선행 조건(결정성·계측)이 달라 구현 후에는 열 수 없다.
+5. **파이프라인**(스펙 우선): SPEC(`spec.md`) → LLD(`plan.md`) → CODE → TEST → **VALIDATE(3층 오라클 × 트랙)**.
 
 ## 하드 제약 (constitution.md 요약)
 - 정적·무료(GitHub Pages), **백엔드 없음**. 개인정보는 **localStorage만**, 서버 저장/계정 없음.
@@ -29,4 +30,5 @@
 - 요청 프롬프트는 `PROMPTS.md`에 누적한다. **public 레포**이므로 사내 기밀·시크릿은 기록 금지.
 
 ## 현재 상태
-Phase 0~4(스펙/설계) 완료. **구현(Phase 5, Kakao 연동) 미착수.** 유일 blocker = Kakao JS 앱키.
+Phase 0~4(스펙/설계) + 4.5(오라클) + 4.6(검증 트랙) **문서화 완료** — 단 자동 점검기(도메인 D1~D10 점검·golden 박제·분포 판정기)는 Phase 5. **구현(Phase 5, Kakao 연동) 미착수.** 유일 blocker = Kakao JS 앱키.
+Phase 5 착수 시 **반드시 함께 넣어야 하는 것**(빠뜨리면 트랙이 닫힘): ① 난수원 주입(`pickRandom(list, rng)`) ② 계측(`elapsedMs`·`searchCalls`·`candidateCount`).
