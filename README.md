@@ -21,7 +21,7 @@
 | 오라클 | 질문 | 이 레포에서 | 상태 |
 |---|---|---|---|
 | 명세 | "스펙대로인가?" | `spec §6` AC (전량 미러) | 📝 판정기준 확립(통과 코드는 Phase 5) |
-| 도메인 | "상식적으로 맞나?" | 반경·야간제외·중복없음·창작금지·키안전·격자피복·좌표날조금지 등 불변식 D1~D10 | 📝 규칙 정의 · ⏳ 자동점검 미구현(Phase 5) |
+| 도메인 | "상식적으로 맞나?" | 반경·야간제외·중복없음·창작금지·키안전·격자피복·좌표날조금지 등 불변식 D1~D10 | 📝 규칙 정의 · ✅ 자동점검 구현(scripts/oracle-check.mjs) |
 | 바이너리 | "이전과 같나?" | 수용 시 golden 스냅샷 → 이후 regression | 🔲 콜드 스타트(구현 수용 후 생성) |
 
 <sub>상태 범례: 📝 규칙/기준 정의됨(문서) · ⏳ 자동 점검 미구현(Phase 5) · 🔲 미생성. (아래 "SDD 진행 단계"의 ✅/🔲와는 별개 — 그건 Phase 완료 여부)</sub>
@@ -32,7 +32,7 @@
 |---|---|---|---|
 | Extension | A + α vs Spec | `spec §6` AC + 도메인 D1~D10 | 📝 기준 확립(실행은 Phase 5) |
 | Regression | A vs A′ | 수용 시 golden 박제 | 🔲 콜드 스타트 |
-| Probabilistic | P(A) ≈ P(A′) | 추천 분포 쏠림 없음(D10) | 🔲 미착수 |
+| Probabilistic | P(A) ≈ P(A′) | 추천 분포 쏠림 없음(D10) | ✅ 판정기 구현(scripts/oracle-check.mjs D10) |
 | Signal | σ(A) vs σ(A′) | `elapsedMs`·`searchCalls`·`candidateCount` 계측 | 🔲 미착수 |
 | Migration | A vs B | 지도 SDK 교체 시 발동 | ➖ 해당 없음 |
 
@@ -47,18 +47,18 @@
 |---|---|---|
 | 0. Constitution (원칙) | [docs/constitution.md](docs/constitution.md) | ✅ |
 | 1. Specify (명세) | [docs/spec.md](docs/spec.md) | ✅ 초안 |
-| 2. Clarify (모호성 해소) | spec 내 "미해결" 절 | ✅ 대부분 확정(위치·반경·점심영업·메뉴힌트) — 앱키만 남음 |
+| 2. Clarify (모호성 해소) | spec 내 "미해결" 절 | ✅ 대부분 확정(위치·반경·점심영업·메뉴힌트·앱키) |
 | 3. Plan (기술설계) | [docs/plan.md](docs/plan.md) | ✅ 초안 |
 | 4. Tasks (작업분해) | [docs/tasks.md](docs/tasks.md) | ✅ |
 | 4.5 Oracle (정답기준) | [docs/oracle.md](docs/oracle.md) | ✅ 문서 (자동점검은 Phase 5) |
 | 4.6 Tracks (판정방법) | [docs/tracks.md](docs/tracks.md) | ✅ 문서 (판정기는 Phase 5) |
-| 5. Implement (구현) | `index.html` 등 | 🔲 다음 (Kakao 연동) |
+| 5. Implement (구현) | `index.html` 등 | ✅ 완료 |
 | 6. Deploy | GitHub Pages | 🔲 |
 
 ## 프롬프트 이력
 이 프로젝트에 요청한 프롬프트는 [PROMPTS.md](PROMPTS.md)에 시간순으로 기록한다.
 
-## 다음 할 일 (구현 전 필요물)
-- 확정됨: 회사 위치(`아차산로13길 11`), 거리(도보 15분≈1km), 점심영업 필터(근사), 메뉴 힌트 방식
-- **남은 유일한 blocker**: **Kakao Developers JS 앱키** 발급 + 배포 도메인(`namsukim8021.github.io`) 등록 → `config.js`에 주입
+## 다음 할 일
+- 확정됨: 회사 위치(`아차산로13길 11`), 거리(도보 15분≈1km), 점심영업 필터(근사), 메뉴 힌트 방식, Kakao JS 앱키
+- **Phase 5 구현 완료.** 남은 것은 **Phase 6 배포**(GitHub Pages 활성화 + Kakao 콘솔에 배포 도메인/필요 시 localhost 등록)
 자세한 내용은 [docs/tasks.md](docs/tasks.md) 참고.
