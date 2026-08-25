@@ -51,6 +51,11 @@ function initDomRefs() {
   els.recentList = $('recent-list');
   els.statusMsg = $('status-msg');
   els.mapContainer = $('map');
+  els.helpBtn = $('help-btn');
+  els.helpOverlay = $('help-overlay');
+  els.helpModal = $('help-modal');
+  els.helpCloseBtn = $('help-close-btn');
+  els.helpModalBody = $('help-modal-body');
 }
 
 // ---------- localStorage 연결부 (개인정보는 localStorage만 — constitution 2) ----------
@@ -309,6 +314,41 @@ function renderCandidateEmpty() {
   els.candidateEmpty.hidden = false;
 }
 
+function buildHelpItems(config, radiusMeters) {
+  // radiusMeters는 config.RADIUS 고정값이 아니라 "지금 실제로 검색에 쓰이는" 반경(currentRadius)을 받는다.
+  // "반경 확대" 후에도 팝업 설명이 실제 동작과 어긋나지 않아야 하므로(spec §6, D4 창작 금지 정신).
+  const radius = Math.round(radiusMeters ?? config.RADIUS ?? 1000);
+  const walkMinutes = Math.max(1, Math.round(radius / WALK_METERS_PER_MIN));
+  const recentLimit = config.RECENT_LIMIT ?? 10;
+  return [
+    `회사(${config.COMPANY_ADDRESS || '등록된 주소'})에서 도보 약 ${walkMinutes}분(직선 약 ${radius}m 근사) 이내 음식점만 후보로 삼아요.`,
+    '술집·호프 등 야간 전용 업종은 자동으로 제외해요. (점심 영업 여부까지 100% 보장하진 못해서, 카카오맵에서 한 번 더 확인해주세요.)',
+    `최근 ${recentLimit}곳은 다시 추천하지 않아요. 후보가 다 소진되면 오래된 순서부터 다시 후보에 포함돼요.`,
+    '남은 후보 중에서 무작위로 한 곳을 골라드려요.',
+    '메뉴 힌트는 업종(카테고리) 기반 추정이에요 — 실제 메뉴·가격·영업시간은 카카오맵 링크에서 확인해주세요.',
+  ];
+}
+
+let helpPreviouslyFocused = null;
+
+function openHelpModal() {
+  if (els.helpModalBody) {
+    els.helpModalBody.innerHTML = buildHelpItems(CONFIG, currentRadius)
+      .map((t) => `<li>${escapeHtml(t)}</li>`)
+      .join('');
+  }
+  helpPreviouslyFocused = document.activeElement;
+  els.helpOverlay.hidden = false;
+  if (els.helpCloseBtn) els.helpCloseBtn.focus();
+}
+
+function closeHelpModal() {
+  els.helpOverlay.hidden = true;
+  if (helpPreviouslyFocused && typeof helpPreviouslyFocused.focus === 'function') {
+    helpPreviouslyFocused.focus();
+  }
+}
+
 function toggleRecentPanel() {
   if (!els.recentPanel) return;
   if (els.recentPanel.hidden) {
@@ -459,6 +499,16 @@ function bindEvents() {
   if (els.expandRadiusBtn) els.expandRadiusBtn.addEventListener('click', handleExpandRadius);
   if (els.retryWithResetBtn)
     els.retryWithResetBtn.addEventListener('click', handleRetryWithReset);
+  if (els.helpBtn) els.helpBtn.addEventListener('click', openHelpModal);
+  if (els.helpCloseBtn) els.helpCloseBtn.addEventListener('click', closeHelpModal);
+  if (els.helpOverlay) {
+    els.helpOverlay.addEventListener('click', (e) => {
+      if (e.target === els.helpOverlay) closeHelpModal(); // 배경 클릭만 닫기, 모달 내부 클릭은 무시
+    });
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && els.helpOverlay && !els.helpOverlay.hidden) closeHelpModal();
+  });
 }
 
 // ---------- 부트스트랩 ----------

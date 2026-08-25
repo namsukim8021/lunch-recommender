@@ -61,13 +61,93 @@
 
   header h1 {
     font-size: 1.4rem;
-    margin: 0 0 4px;
+    margin: 0;
   }
 
   header p {
-    margin: 0;
+    margin: 4px 0 0;
     color: var(--muted);
     font-size: 0.85rem;
+  }
+
+  .title-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .help-btn {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--card-bg);
+    color: var(--muted);
+    font-weight: 700;
+    font-size: 0.8rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+  }
+
+  .help-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    z-index: 100;
+  }
+
+  .help-modal {
+    background: var(--card-bg);
+    border-radius: 16px;
+    max-width: 420px;
+    width: 100%;
+    max-height: 80vh;
+    overflow-y: auto;
+    padding: 20px;
+  }
+
+  .help-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
+  .help-modal-header h2 {
+    margin: 0;
+    font-size: 1.1rem;
+  }
+
+  .help-close-btn {
+    font-size: 1.1rem;
+    cursor: pointer;
+    border: none;
+    background: none;
+    color: var(--text);
+    padding: 0;
+  }
+
+  .help-modal-body {
+    list-style: disc;
+    padding-left: 20px;
+    margin: 0;
+    font-size: 0.92rem;
+    line-height: 1.6;
+    color: var(--text);
+  }
+
+  .help-modal-body li + li {
+    margin-top: 8px;
   }
 
   .primary-btn {
@@ -232,7 +312,10 @@
 </head>
 <body>
   <header>
-    <h1>🍚 오늘 점심 추천</h1>
+    <div class="title-row">
+      <h1>🍚 오늘 점심 추천</h1>
+      <button id="help-btn" class="help-btn" type="button" aria-haspopup="dialog" aria-controls="help-modal" aria-label="추천 로직 설명 보기">?</button>
+    </div>
     <p>회사 주변에서, 최근이랑 안 겹치게 골라드려요</p>
   </header>
 
@@ -268,6 +351,16 @@
       <ul id="recent-list"></ul>
     </div>
   </footer>
+
+  <div id="help-overlay" class="help-overlay" hidden>
+    <div id="help-modal" class="help-modal" role="dialog" aria-modal="true" aria-labelledby="help-modal-title">
+      <div class="help-modal-header">
+        <h2 id="help-modal-title">어떻게 추천하나요?</h2>
+        <button id="help-close-btn" class="help-close-btn" type="button" aria-label="닫기">✕</button>
+      </div>
+      <ul id="help-modal-body" class="help-modal-body"></ul>
+    </div>
+  </div>
 
   <script src="config.js"></script>
   <script type="module" src="app.js"></script>
