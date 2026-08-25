@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>오늘 점심 추천</title>
+<meta name="description" content="회사 주변 점심 식당을 랜덤 + 최근 안 겹치게 추천합니다." />
+<style>
+  :root {
+    --bg: #f7f5f2;
+    --card-bg: #ffffff;
+    --text: #1f1b16;
+    --muted: #6b6259;
+    --accent: #e8590c;
+    --accent-text: #ffffff;
+    --border: #e5ddd3;
+    --error-bg: #fdeceb;
+    --error-text: #c0392b;
+    --link: #1a73e8;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16140f;
+      --card-bg: #241f18;
+      --text: #f2ede3;
+      --muted: #b3a99a;
+      --accent: #ff7a33;
+      --accent-text: #16140f;
+      --border: #3a332a;
+      --error-bg: #3a1f1c;
+      --error-text: #ff9d90;
+      --link: #7db8ff;
+    }
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
+    line-height: 1.5;
+    padding: 16px;
+    max-width: 480px;
+    margin: 0 auto;
+    min-height: 100vh;
+  }
+
+  header {
+    text-align: center;
+    padding: 12px 0 20px;
+  }
+
+  header h1 {
+    font-size: 1.4rem;
+    margin: 0 0 4px;
+  }
+
+  header p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+
+  .primary-btn {
+    display: block;
+    width: 100%;
+    padding: 16px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    border: none;
+    border-radius: 14px;
+    background: var(--accent);
+    color: var(--accent-text);
+    cursor: pointer;
+    margin-bottom: 14px;
+  }
+
+  .primary-btn:disabled,
+  .secondary-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .status-msg {
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: var(--border);
+    color: var(--text);
+    font-size: 0.85rem;
+    margin-bottom: 14px;
+  }
+
+  .status-msg.status-error {
+    background: var(--error-bg);
+    color: var(--error-text);
+  }
+
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 18px;
+    margin-bottom: 14px;
+  }
+
+  .empty-state {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+
+  #result-card .place-name {
+    margin: 0 0 6px;
+    font-size: 1.3rem;
+  }
+
+  #result-card .place-category {
+    margin: 0 0 8px;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  #result-card .place-hint {
+    margin: 0 0 8px;
+    font-weight: 600;
+  }
+
+  #result-card .place-distance {
+    margin: 0 0 12px;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  #result-card .place-link {
+    display: inline-block;
+    color: var(--link);
+    font-weight: 600;
+    text-decoration: none;
+    margin-bottom: 12px;
+  }
+
+  #result-card .place-link:hover {
+    text-decoration: underline;
+  }
+
+  #result-card .place-disclaimer {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+
+  #map {
+    width: 100%;
+    height: 220px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    margin-bottom: 14px;
+    background: var(--border);
+  }
+
+  .candidate-empty {
+    text-align: center;
+  }
+
+  .candidate-empty p {
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+
+  .btn-row {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .secondary-btn {
+    flex: 1 1 auto;
+    min-width: 100px;
+    padding: 12px 10px;
+    font-size: 0.92rem;
+    font-weight: 600;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--card-bg);
+    color: var(--text);
+    cursor: pointer;
+  }
+
+  footer {
+    margin-top: 16px;
+  }
+
+  .recent-panel {
+    margin-top: 12px;
+  }
+
+  .recent-panel h2 {
+    font-size: 1rem;
+    margin: 0 0 8px;
+  }
+
+  #recent-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  #recent-list li {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.9rem;
+  }
+
+  #recent-list li:last-child {
+    border-bottom: none;
+  }
+
+  [hidden] {
+    display: none !important;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>🍚 오늘 점심 추천</h1>
+    <p>회사 주변에서, 최근이랑 안 겹치게 골라드려요</p>
+  </header>
+
+  <button id="recommend-btn" class="primary-btn" type="button" disabled>🍚 오늘 점심 추천</button>
+
+  <div id="status-msg" class="status-msg" hidden></div>
+
+  <section class="card" id="result-card" hidden></section>
+
+  <section class="card empty-state" id="empty-state">
+    버튼을 눌러 오늘 점심을 추천받아보세요.
+  </section>
+
+  <section class="card candidate-empty" id="candidate-empty" hidden>
+    <p>조건에 맞는 후보가 없습니다. 반경을 넓히거나 추천 이력을 초기화해보세요.</p>
+    <div class="btn-row">
+      <button id="expand-radius-btn" class="secondary-btn" type="button">반경 확대</button>
+      <button id="retry-with-reset-btn" class="secondary-btn" type="button">이력 초기화 후 재시도</button>
+    </div>
+  </section>
+
+  <div id="map"></div>
+
+  <footer>
+    <div class="btn-row">
+      <button id="another-btn" class="secondary-btn" type="button" disabled>다른 곳</button>
+      <button id="recent-btn" class="secondary-btn" type="button" disabled>최근 추천 보기</button>
+      <button id="reset-history-btn" class="secondary-btn" type="button" disabled>이력 초기화</button>
+    </div>
+
+    <div class="recent-panel card" id="recent-panel" hidden>
+      <h2>최근 추천 이력</h2>
+      <ul id="recent-list"></ul>
+    </div>
+  </footer>
+
+  <script src="config.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
