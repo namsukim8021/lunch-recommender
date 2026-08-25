@@ -15,6 +15,59 @@
       └─ 지도 렌더 + 결과 카드 + 카카오맵 링크
 ```
 
+### 탭 구조 (3패널, 라우팅 없음)
+```
+[브라우저 — 3탭 구조, 라우팅 없음(단일 index.html, hidden 토글)]
+  index.html
+    ├─ config.js                          → 전역 설정(window.LUNCH_CONFIG)
+    ├─ 탭1(기본, hidden 토글) — app.js     → 위 다이어그램 그대로(무변경)
+    │     └─ window.__lunchTab1 getter 노출 (candidates/center/radius/hasSearchedOnce)
+    ├─ 탭2 모락모락(hidden 토글) — moremore.js → 풀무원 모락모락 API 직접 fetch(POST)
+    └─ 탭3 월드컵(hidden 토글) — worldcup.js   → window.__lunchTab1 재사용 우선, 없으면 lib/core.js로 자체 수집
+  tabs.js                                  → 탭 전환(활성 탭만 표시, 페이지 이동/라우팅 없음)
+```
+**신규 파일**: `tabs.js`(탭 전환) · `moremore.js`(모락모락 데이터소스+렌더) · `worldcup.js`(월드컵 풀 구성+브래킷+렌더). 기존 `app.js`/`lib/core.js`/`config.js`/`index.html`의 파일 구조 원칙(ES 모듈, 단일 파일)은 유지하고, 위 3개 파일만 추가된다.
+
+## 모락모락(탭2) 데이터소스
+- 엔드포인트: `https://puls2.pulmuone.com/src/sql/menu/today_sql.php` (POST, 브라우저에서 직접 fetch — 서버 프록시 없음, constitution 1 · spec §7).
+- 요청 바디(`application/x-www-form-urlencoded`): `requestId=search_schMenu&requestUrl=%2Fsrc%2Fsql%2Fmenu%2Ftoday_sql.php&requestMode=1&requestParam=<JSON을 url-encode>`.
+  - `requestParam` JSON: `{"srchOperCd":"O000002","srchAssignCd":"S000758","srchCurDay":"<오늘 YYYYMMDD, KST, 매 호출 동적생성>","srchCurShopclsCd":"","custCd":""}`.
+- 응답: `{"data":[[...],...]}`. 사용 필드(배열 인덱스, 0-based) — 아래 표 외 인덱스는 미사용(창작 금지, constitution 3):
+
+| 인덱스 | 의미 | 비고 |
+|---|---|---|
+| 1 | 메뉴명(한글) | |
+| 2 | kcal | 문자열("887"/"1,324"/"0") — "0"이거나 파싱 불가면 `null` 처리 |
+| 3 | 이미지 base URL | 없으면 `null` |
+| 4 | 이미지 파일명 | 없으면 `null`. 실제 이미지 URL = index3 + index4 |
+| 5 | 사이드메뉴 | `" / "` 구분, `null` 가능 |
+| 6 | 코너명 | 백반/스페셜/TAKEOUT 등 |
+| 12 | 영문명 | `null` 가능 |
+
+- **3경로 통합 실패처리**: 아래 세 경로 모두 동일한 하나의 "준비중입니다" 안내로 귀결한다.
+  1. fetch 실패(CORS 차단·네트워크 오류·비2xx 응답)
+  2. 응답은 200이지만 `data`가 빈 배열
+  3. 파싱 중 예외(필드 형식이 기대와 다름 등)
+  - 파싱 함수는 **절대 throw하지 않고** 항상 `{ ready: boolean, items: [...] }` 형태를 반환한다(호출부가 성공/실패를 분기하지 않고 `ready` 하나만 보면 되게).
+- 화면: 코너별 카드(이미지·kcal·한글/영문명·사이드메뉴). 만족도 평가·저장 등은 범위 밖(백엔드 없음, spec §7).
+
+## 점심메뉴 월드컵(탭3)
+- 참가 16개, 16강(8경기)→8강(4경기)→4강(2경기)→결승(1경기), 총 15경기.
+- **참가 풀 구성**: 새 Kakao API 호출을 추가하지 않는다. 탭1이 수집한 실제 후보 식당을 재사용해 각 후보에 `lib/core.js`의 `deriveMenuHint`로 메뉴 힌트를 붙인 `(place, menuText)` 쌍의 풀을 만들고, **유효한 힌트가 있는 쌍만** 참가 후보로 삼는다. 그 풀에서 주입 가능 `rng`로 16개를 비복원 추출한다(런타임 기본값 `Math.random`, 검증 시 고정 시드 PRNG — 탭1 추천 로직의 결정성 불변식과 같은 원칙).
+- **탭1 재사용 방식(getter 노출)**: `app.js`는 기존 `let candidates` / `let center` / `let currentRadius` / `let hasSearchedOnce` 선언부 바로 아래에 **단 한 번**, 작은 getter 객체를 추가한다(그 외 app.js의 기존 로직·동작은 절대 바꾸지 않는다):
+  ```js
+  window.__lunchTab1 = {
+    get candidates() { return candidates; },
+    get center() { return center; },
+    get radius() { return currentRadius; },
+    get hasSearchedOnce() { return hasSearchedOnce; },
+  };
+  ```
+  `worldcup.js`는 `window.__lunchTab1.hasSearchedOnce && window.__lunchTab1.candidates.length > 0`이면 그 후보를 그대로 재사용해 Kakao 검색을 중복 호출하지 않는다. 아직 없으면 `lib/core.js`의 공개 함수(`buildGridTiles`/`mergeGridResults`/`filterByRadius`/`filterLunchCandidates`)로 `worldcup.js` 자체 안에서 후보를 수집한다(app.js 내부 `categorySearchPage`와 같은 패턴을 이 파일 안에서 독자 구현 — 코드 일부 중복은 허용, app.js 무수정 원칙이 우선).
+- **후보 부족 처리**: 유효 힌트 보유 후보가 16개 미만이면 지어내지 않고 "대표 메뉴가 16개 미만입니다 — 반경을 넓혀보세요" 안내 + 반경 확대 버튼을 보여준다.
+- **브래킷 진행(순수 함수)**: 매 라운드 참가자 수는 정확히 절반, 승자만 다음 라운드에 진출(패자 재등장 없음), 각 매치는 서로 다른 두 참가자로 구성한다.
+- **매치 UI**: 좌/우로 카테고리 이모지(실사진 아님을 명시)·메뉴명·식당명을 보여준다. 최종 우승 시 실제 식당명과 카카오맵 링크(`place.place_url` — 이 레포 필드명은 snake_case `place_url`)로 연결한다.
+
 ## 데이터 소스: Kakao Maps JS SDK
 - 로드: `//dapi.kakao.com/v2/maps/sdk.js?appkey={JS_KEY}&libraries=services&autoload=false`
 - **중심 좌표(주소→좌표)**: 회사 주소 `서울특별시 성동구 아차산로13길 11` 을 `kakao.maps.services.Geocoder().addressSearch(addr, cb)` 로 1회 지오코딩해 CENTER 로 사용(하드코딩 좌표 대신 주소 기준 → 창작 금지 준수). 지오코딩 결과를 config `CENTER`에 캐시해도 됨. **실패/무결과 시**에는 임의 좌표로 진행하지 않고 사용자에게 안내 후 중단한다.
@@ -104,6 +157,13 @@ window.LUNCH_CONFIG = {
     "양식": ["파스타","스테이크"], "중식": ["짜장면","짬뽕"], "일식": ["초밥","돈카츠","우동"],
     "분식": ["떡볶이","김밥"], "한식": ["백반","찌개","비빔밥"], "아시아음식": ["쌀국수","팟타이"],
   },
+  MOREMORE_API_URL: "https://puls2.pulmuone.com/src/sql/menu/today_sql.php",
+  MOREMORE_SRCH_OPER_CD: "O000002",
+  MOREMORE_SRCH_ASSIGN_CD: "S000758",
+  WORLDCUP_POOL_SIZE: 16,
+  WORLDCUP_CATEGORY_EMOJI: { // 카테고리(리프)→이모지 매핑, 매칭 없으면 폴백 이모지 사용
+    "한식": "🍚", "양식": "🍝", "중식": "🥟", "일식": "🍣", "분식": "🍢", "아시아음식": "🍜",
+  },
 };
 ```
 
@@ -127,3 +187,8 @@ window.LUNCH_CONFIG = {
 - **난수원 주입이 실제로 되는가** — 고정 시드 PRNG를 주입했을 때 같은 입력에 같은 추천이 재현되는가(Regression·Probabilistic 두 트랙의 전제).
 - **추천 분포가 균등한가** — 고정 후보집합·고정 시드로 대량 시행 시 특정 후보 쏠림이 없는가(D10).
 - **계측값이 기록되는가** — `elapsedMs`·`searchCalls`·`candidateCount`가 추천마다 남는가.
+- **모락모락 3경로**가 모두 같은 "준비중입니다"로 귀결하는가(fetch 실패/빈 data/파싱 예외 3가지 모두 확인).
+- **월드컵 라운드 축소**가 매번 정확히 절반이고 패자가 재등장하지 않는가(16→8→4→2→1).
+- **월드컵 결정성** — 주입 가능 rng로 16개 추출 시 같은 시드에서 같은 참가 풀이 재현되는가.
+- **후보 부족 처리** — 유효 힌트 보유 후보가 16개 미만일 때 지어내지 않고 안내되는가.
+- **탭1 재사용** — `hasSearchedOnce && candidates.length > 0`일 때 월드컵이 Kakao 검색을 다시 호출하지 않고 `window.__lunchTab1`의 후보를 그대로 쓰는가.

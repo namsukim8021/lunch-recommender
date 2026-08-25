@@ -49,6 +49,18 @@
 - [x] 5.9 **계측 배선** — `elapsedMs`·`searchCalls`·`candidateCount`를 `localStorage["lunch_metrics"]` 링버퍼에 기록(Signal Track 관측점, [plan.md](plan.md) 계측)
 - [x] 5.10 (추가) 추천 로직 설명 팝업 — 타이틀 옆 '?' 아이콘 → 레이어 팝업, config 값 기반 동적 설명
 
+## Phase 5.5 — 3탭 확장(모락모락·월드컵)
+> Extension 트랙([tracks.md §3-3](tracks.md))으로 판정 — 레퍼런스는 `spec §6` 신규 AC + 도메인 D12~D15([oracle.md](oracle.md)). 지금은 문서(spec/plan/oracle/tracks/tasks/CLAUDE.md/README.md) 갱신만 진행, 구현은 다음 단계.
+- [x] 문서화 — spec.md(UC6/UC7·§4·§6·§7·§8)·plan.md(아키텍처·모락모락 데이터소스·월드컵·config 예시·테스트 관점)·oracle.md(AC 미러·D12~D15)·tracks.md(§3-3)·tasks.md(이 절)·CLAUDE.md·README.md 갱신
+- [x] `lib/core.js`에 순수 함수 추가(모락모락 응답 파싱/3경로 통합, 월드컵 참가 풀 구성, 브래킷 라운드 진행 등 — 상세 시그니처는 구현 착수 시 plan.md에 먼저 반영)
+- [x] `app.js`에 `window.__lunchTab1` getter 노출 1줄 추가(기존 로직·동작 무수정)
+- [x] `moremore.js` 신설 — 모락모락 API fetch + 3경로 통합 파싱 + 코너별 카드 렌더
+- [x] `worldcup.js` 신설 — 탭1 재사용/자체 수집 + 브래킷 진행 + 매치 UI 렌더
+- [x] `tabs.js` 신설 — 3탭 전환(hidden 토글, 라우팅 없음)
+- [x] `index.html`에 3탭 마크업 + 탭별 컨테이너 추가
+- [x] `config.js`에 `MOREMORE_API_URL`·`MOREMORE_SRCH_OPER_CD`·`MOREMORE_SRCH_ASSIGN_CD`·`WORLDCUP_POOL_SIZE`·`WORLDCUP_CATEGORY_EMOJI` 추가
+- [x] `scripts/oracle-check.mjs`에 D12~D15 점검 추가(`runCheck` 패턴)
+
 ## Phase 6 — 배포
 - [ ] `.nojekyll` + GitHub Pages 활성화(main / root)
 - [ ] Kakao 앱키 허용 도메인에 Pages 도메인 등록

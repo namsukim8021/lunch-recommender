@@ -33,6 +33,14 @@ let hasSearchedOnce = false;
 let lastCandidateCount = { before: 0, after: 0 };
 let lastSearchCalls = 0;
 
+// 탭3(worldcup.js)가 이미 수집된 탭1 후보를 재사용할 수 있도록 읽기전용 노출 (docs/plan.md)
+window.__lunchTab1 = {
+  get candidates() { return candidates; },
+  get center() { return center; },
+  get radius() { return currentRadius; },
+  get hasSearchedOnce() { return hasSearchedOnce; },
+};
+
 function $(id) {
   return document.getElementById(id);
 }

@@ -53,6 +53,7 @@
 | 4.5 Oracle (정답기준) | [docs/oracle.md](docs/oracle.md) | ✅ 문서 (자동점검은 Phase 5) |
 | 4.6 Tracks (판정방법) | [docs/tracks.md](docs/tracks.md) | ✅ 문서 (판정기는 Phase 5) |
 | 5. Implement (구현) | `index.html` 등 | ✅ 완료 |
+| 5.5 3탭 확장 문서화(모락모락·월드컵) | [docs/tasks.md](docs/tasks.md) Phase 5.5 | 📝 문서 갱신 완료(구현 대기) |
 | 6. Deploy | GitHub Pages | 🔲 |
 
 ## 프롬프트 이력
