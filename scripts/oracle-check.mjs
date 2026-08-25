@@ -25,6 +25,10 @@ import {
   isPageTruncated,
   mergeGridResults,
   geocodeAddress,
+  parseMoremoreResponse,
+  buildWorldcupPool,
+  pairMatches,
+  nextRoundParticipants,
 } from '../lib/core.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -432,10 +436,282 @@ await runCheck('D11', '부가 계약 점검: dedupeById/updateRecent/mergeGridRe
 });
 
 // ─────────────────────────────────────────────────────────────────────────
+// D12: 모락모락 3경로 통합 · 창작 금지
+// ─────────────────────────────────────────────────────────────────────────
+await runCheck('D12', 'parseMoremoreResponse: 3경로(fetch실패/빈data/파싱예외) 동일 귀결 + 필드 창작 금지', async () => {
+  // 모의 응답 행: index 1=nameKo 2=kcal 3=이미지baseURL 4=이미지파일명 5=sides 6=corner 12=nameEn
+  function makeRow({ nameKo, kcal = null, imgBase = null, imgFile = null, sidesStr = null, corner = null, nameEn = null }) {
+    const row = new Array(13).fill(null);
+    row[1] = nameKo;
+    row[2] = kcal;
+    row[3] = imgBase;
+    row[4] = imgFile;
+    row[5] = sidesStr;
+    row[6] = corner;
+    row[12] = nameEn;
+    return row;
+  }
+
+  const rowA = makeRow({
+    nameKo: '제육볶음정식',
+    kcal: '1,324', // 콤마 포함 → 숫자 변환
+    imgBase: 'https://img.pulmuone.com/',
+    imgFile: 'jeyuk.jpg',
+    sidesStr: '김치 / 콩나물국',
+    corner: '백반',
+    nameEn: 'Stir-fried Pork Set',
+  });
+  const rowB = makeRow({
+    nameKo: '샐러드바',
+    kcal: '0', // "0" → null 처리
+    corner: '스페셜',
+  });
+  const rowC = makeRow({
+    nameKo: '돈까스',
+    kcal: '750',
+    imgBase: 'https://img.pulmuone.com/',
+    imgFile: 'donkatsu.jpg',
+    sidesStr: '단무지 / 양배추',
+    corner: 'TAKEOUT',
+    nameEn: 'Pork Cutlet',
+  });
+  const rowEmptyName = makeRow({ nameKo: '', kcal: '500', corner: '제외되어야함' }); // nameKo 빈문자열 → 제외
+  const rowUnparsableKcal = makeRow({ nameKo: '특선메뉴', kcal: 'N/A', corner: '특선' }); // 파싱불가 → null
+
+  const mockRows = [rowA, rowB, rowC, rowEmptyName, rowUnparsableKcal];
+  const result = parseMoremoreResponse({ data: mockRows });
+
+  assert.ok(result && typeof result === 'object', '반환값이 객체가 아님');
+  assert.strictEqual(result.ready, true, `정상 응답인데 ready!==true (${JSON.stringify(result.ready)})`);
+  assert.strictEqual(result.items.length, 4, `nameKo 빈 행은 제외되어 4개여야 하는데 ${result.items.length}개`);
+
+  const EXPECTED_KEYS = ['corner', 'nameKo', 'nameEn', 'kcal', 'imageUrl', 'sides'].sort();
+  for (const item of result.items) {
+    const actualKeys = Object.keys(item).sort();
+    assert.deepStrictEqual(actualKeys, EXPECTED_KEYS, `item이 정의된 6개 필드 외를 갖거나 누락함: ${JSON.stringify(actualKeys)}`);
+  }
+
+  const itemA = result.items.find((i) => i.nameKo === '제육볶음정식');
+  assert.ok(itemA, 'rowA 파싱 결과 없음');
+  assert.strictEqual(itemA.kcal, 1324, `콤마 kcal 파싱 실패(${itemA.kcal})`);
+  assert.strictEqual(itemA.imageUrl, 'https://img.pulmuone.com/jeyuk.jpg', `imageUrl = index3+index4 아님(${itemA.imageUrl})`);
+  assert.deepStrictEqual(itemA.sides, ['김치', '콩나물국'], `sides " / " split 실패(${JSON.stringify(itemA.sides)})`);
+  assert.strictEqual(itemA.corner, '백반');
+  assert.strictEqual(itemA.nameEn, 'Stir-fried Pork Set');
+
+  const itemB = result.items.find((i) => i.nameKo === '샐러드바');
+  assert.ok(itemB, 'rowB 파싱 결과 없음');
+  assert.strictEqual(itemB.kcal, null, `kcal "0" 인데 null 아님(${itemB.kcal})`);
+  assert.strictEqual(itemB.imageUrl, null, `이미지 필드 없는데 imageUrl null 아님(${itemB.imageUrl})`);
+  assert.deepStrictEqual(itemB.sides, [], `sides null인데 [] 아님(${JSON.stringify(itemB.sides)})`);
+
+  const itemE = result.items.find((i) => i.nameKo === '특선메뉴');
+  assert.ok(itemE, 'rowUnparsableKcal 파싱 결과 없음');
+  assert.strictEqual(itemE.kcal, null, `kcal 파싱 불가("N/A")인데 null 아님(${itemE.kcal})`);
+
+  // 3경로(+ 그 외 이상 입력) 모두 예외 없이 {ready:false, items:[]} 류로 귀결
+  const abnormalInputs = [null, undefined, {}, { data: '문자열' }, { data: [] }, { data: [['불완전행']] }];
+  for (const input of abnormalInputs) {
+    let out;
+    assert.doesNotThrow(() => {
+      out = parseMoremoreResponse(input);
+    }, `입력 ${JSON.stringify(input)}에서 throw 발생(절대 throw 금지 위반)`);
+    assert.ok(out && typeof out === 'object', `입력 ${JSON.stringify(input)} 결과가 객체가 아님`);
+    assert.strictEqual(out.ready, false, `입력 ${JSON.stringify(input)}에서 ready!==false (${JSON.stringify(out.ready)})`);
+    assert.ok(Array.isArray(out.items) && out.items.length === 0, `입력 ${JSON.stringify(input)}에서 items가 빈 배열이 아님`);
+  }
+
+  return {
+    status: 'PASS',
+    detail: `정상 3행 파싱(콤마kcal/kcal0/파싱불가kcal 확인, 필드 6개 정확 일치, 빈 nameKo 제외) + 이상입력 ${abnormalInputs.length}종 전부 {ready:false, items:[]} 귀결`,
+  };
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// D13: 월드컵 참가 메뉴는 실제 후보 기반(가상 식당 없음)
+// ─────────────────────────────────────────────────────────────────────────
+const CATEGORY_MENU_HINTS = {
+  양식: ['파스타', '스테이크'],
+  중식: ['짜장면', '짬뽕'],
+  일식: ['초밥', '돈카츠', '우동'],
+  분식: ['떡볶이', '김밥'],
+  한식: ['백반', '찌개', '비빔밥'],
+  아시아음식: ['쌀국수', '팟타이'],
+};
+
+// toCandidate() 결과와 동일한 형태: {id,name,category_name,distance,lat,lng,address,place_url,...}
+function makeCandidate(id, categoryName) {
+  return {
+    id,
+    name: `식당${id}`,
+    category_name: categoryName,
+    distance: 100 + Number(String(id).replace(/\D/g, '')),
+    lat: 37.5665 + Number(String(id).replace(/\D/g, '')) * 0.0001,
+    lng: 126.978 + Number(String(id).replace(/\D/g, '')) * 0.0001,
+    address: `서울특별시 성동구 어딘가 ${id}`,
+    place_url: `https://place.map.kakao.com/${id}`,
+  };
+}
+
+const VALID_LEAF_CATEGORIES = [
+  '음식점 > 한식 > 국밥',
+  '음식점 > 양식 > 파스타,스테이크',
+  '음식점 > 중식 > 짜장면',
+  '음식점 > 일식 > 초밥',
+  '음식점 > 분식 > 떡볶이',
+  '음식점 > 한식', // 리프가 매핑 폴백('한식') → 여전히 non-null
+];
+
+await runCheck('D13', 'buildWorldcupPool: 참가 풀이 실제 후보 참조 그대로(가상 식당 생성 없음) + 부족 시 지어내지 않음 + 결정성', async () => {
+  // 후보 20개: 16개는 유효(non-empty category_name → deriveMenuHint non-null), 4개는 무효(category_name='' → null)
+  const candidates20 = [];
+  for (let i = 1; i <= 16; i++) {
+    candidates20.push(makeCandidate(`w${i}`, VALID_LEAF_CATEGORIES[(i - 1) % VALID_LEAF_CATEGORIES.length]));
+  }
+  for (let i = 17; i <= 20; i++) {
+    candidates20.push(makeCandidate(`w${i}`, '')); // 힌트 없는(빈) 카테고리 → 무효 후보
+  }
+
+  const rng1 = mulberry32(FIXED_SEED);
+  const { pool, sufficient } = buildWorldcupPool(candidates20, CATEGORY_MENU_HINTS, 16, rng1);
+  assert.strictEqual(sufficient, true, `유효 후보 16개인데 sufficient!==true`);
+  assert.strictEqual(pool.length, 16, `pool 크기가 16이 아님(${pool.length})`);
+
+  const validCandidates = candidates20.slice(0, 16);
+  const seenIds = new Set();
+  for (const entry of pool) {
+    assert.ok(entry && entry.place && typeof entry.menuText !== 'undefined', 'pool 원소가 {place, menuText} 형태가 아님');
+    const isSameRef = validCandidates.some((c) => c === entry.place);
+    assert.ok(isSameRef, `entry.place가 원본 candidates 배열의 참조와 동일하지 않음(가상 식당 생성 의심): ${JSON.stringify(entry.place)}`);
+    assert.ok(!seenIds.has(entry.place.id), `place.id 중복 발견: ${entry.place.id}`);
+    seenIds.add(entry.place.id);
+  }
+
+  // 유효 후보가 size보다 적을 때: 지어내지 않고 있는 만큼만
+  const only10Valid = candidates20.slice(0, 10);
+  const rng2 = mulberry32(FIXED_SEED ^ 0x2468);
+  const shortResult = buildWorldcupPool(only10Valid, CATEGORY_MENU_HINTS, 16, rng2);
+  assert.strictEqual(shortResult.sufficient, false, `유효 후보 10개 < size 16인데 sufficient!==false`);
+  assert.strictEqual(shortResult.pool.length, 10, `부족 시 pool 크기가 유효 후보 수(10)와 다름(${shortResult.pool.length})`);
+  const shortIds = shortResult.pool.map((e) => e.place.id).sort();
+  assert.deepStrictEqual(shortIds, only10Valid.map((c) => c.id).sort(), '부족 시 pool이 유효 후보 전체와 다름(지어냄 의심)');
+
+  // 결정성: 같은 고정 시드로 두 번 호출 시 같은 pool
+  const poolRun1 = buildWorldcupPool(candidates20, CATEGORY_MENU_HINTS, 16, mulberry32(FIXED_SEED));
+  const poolRun2 = buildWorldcupPool(candidates20, CATEGORY_MENU_HINTS, 16, mulberry32(FIXED_SEED));
+  const ids1 = poolRun1.pool.map((e) => e.place.id);
+  const ids2 = poolRun2.pool.map((e) => e.place.id);
+  assert.deepStrictEqual(ids1, ids2, `같은 고정 시드인데 두 번 호출 결과가 다름(비결정적): ${JSON.stringify(ids1)} vs ${JSON.stringify(ids2)}`);
+
+  return {
+    status: 'PASS',
+    detail: `sufficient=true·pool=16(참조동일성/중복없음 확인), 부족(10<16) 시 지어내지 않고 pool=10, 고정시드 2회 호출 동일 pool 확인`,
+  };
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// D14: 브래킷 라운드마다 정확히 절반, 패자 재등장 없음
+// ─────────────────────────────────────────────────────────────────────────
+await runCheck('D14', 'pairMatches/nextRoundParticipants: 라운드마다 정확히 절반 + 패자 재등장 없음(16→8→4→2→1, 총 15경기)', async () => {
+  const participants16 = Array.from({ length: 16 }, (_, i) => ({ id: `p${i + 1}` }));
+
+  // pairMatches: 순차 페어링 확인
+  const firstRoundMatches = pairMatches(participants16);
+  assert.strictEqual(firstRoundMatches.length, 8, `16명 페어링 결과가 8매치가 아님(${firstRoundMatches.length})`);
+  for (let i = 0; i < firstRoundMatches.length; i++) {
+    const m = firstRoundMatches[i];
+    assert.strictEqual(m.a, participants16[2 * i], `매치[${i}].a 페어링 순서 불일치`);
+    assert.strictEqual(m.b, participants16[2 * i + 1], `매치[${i}].b 페어링 순서 불일치`);
+    assert.notStrictEqual(m.a, m.b, `매치[${i}]가 동일 참가자로 구성됨`);
+  }
+
+  // nextRoundParticipants: winnerSides에 맞는 쪽 선택
+  const winnerSidesFixed = [0, 1, 0, 1, 0, 1, 0, 1];
+  const winners8 = nextRoundParticipants(firstRoundMatches, winnerSidesFixed);
+  assert.strictEqual(winners8.length, 8, `승자 수가 8이 아님(${winners8.length})`);
+  for (let i = 0; i < firstRoundMatches.length; i++) {
+    const expected = winnerSidesFixed[i] === 0 ? firstRoundMatches[i].a : firstRoundMatches[i].b;
+    assert.strictEqual(winners8[i], expected, `winnerSides[${i}]=${winnerSidesFixed[i]}인데 승자 선택이 다름`);
+  }
+
+  // end-to-end: 16→8→4→2→1, 매 라운드 정확히 절반 + 이전 라운드 패자가 이후 라운드에 재등장하지 않음
+  let round = Array.from({ length: 16 }, (_, i) => ({ id: `e${i + 1}` }));
+  const priorLosers = new Set();
+  let totalMatches = 0;
+  const roundSizeLog = [];
+  while (round.length > 1) {
+    for (const p of round) {
+      assert.ok(!priorLosers.has(p), `이전 라운드 패자(${p.id})가 이번 라운드에 재등장함`);
+    }
+    roundSizeLog.push(round.length);
+    const matches = pairMatches(round);
+    totalMatches += matches.length;
+    for (const m of matches) {
+      assert.notStrictEqual(m.a, m.b, '매치가 동일 참가자로 구성됨');
+    }
+    const winnerSides = matches.map((_, idx) => idx % 2); // 결정적 패턴(항상 짝수 인덱스는 a, 홀수는 b 승)
+    const winners = nextRoundParticipants(matches, winnerSides);
+    assert.strictEqual(winners.length, round.length / 2, `라운드 축소가 정확히 절반이 아님(${round.length} → ${winners.length})`);
+    const losers = matches.map((m, idx) => (winnerSides[idx] === 0 ? m.b : m.a));
+    for (const loser of losers) priorLosers.add(loser);
+    round = winners;
+  }
+  assert.strictEqual(totalMatches, 15, `전체 경기 수가 15가 아님(${totalMatches})`);
+  assert.strictEqual(round.length, 1, `최종 우승자가 1명이 아님(${round.length})`);
+  assert.ok(!priorLosers.has(round[0]), '최종 우승자가 과거 패자 집합에 속함(모순)');
+
+  return {
+    status: 'PASS',
+    detail: `pairMatches 순서 확인(8매치), nextRoundParticipants winnerSides 선택 확인, e2e 16→${roundSizeLog.slice(1).join('→')}→1 총 ${totalMatches}경기, 패자 재등장 0건`,
+  };
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// D15: 우승 메뉴는 실제 식당과 연결(가짜 링크 금지)
+// ─────────────────────────────────────────────────────────────────────────
+await runCheck('D15', '전체 토너먼트 시뮬레이션: 최종 우승자 place.place_url이 원본 후보와 정확히 일치(가짜 링크 없음)', async () => {
+  const candidates20 = [];
+  for (let i = 1; i <= 16; i++) {
+    candidates20.push(makeCandidate(`d15-w${i}`, VALID_LEAF_CATEGORIES[(i - 1) % VALID_LEAF_CATEGORIES.length]));
+  }
+  for (let i = 17; i <= 20; i++) {
+    candidates20.push(makeCandidate(`d15-w${i}`, ''));
+  }
+
+  const rng = mulberry32(FIXED_SEED);
+  const { pool, sufficient } = buildWorldcupPool(candidates20, CATEGORY_MENU_HINTS, 16, rng);
+  assert.strictEqual(sufficient, true, '시뮬레이션 전제(유효 후보 16개) 불충족');
+  assert.strictEqual(pool.length, 16);
+
+  let round = pool; // Array<{place, menuText}>
+  let matchCount = 0;
+  while (round.length > 1) {
+    const matches = pairMatches(round);
+    matchCount += matches.length;
+    const winnerSides = matches.map(() => Math.floor(rng() * 2)); // 무작위 승자 선택도 같은 rng로
+    round = nextRoundParticipants(matches, winnerSides);
+  }
+  assert.strictEqual(round.length, 1, '최종 우승자가 1명이 아님');
+  assert.strictEqual(matchCount, 15, `전체 경기 수가 15가 아님(${matchCount})`);
+
+  const champion = round[0];
+  assert.ok(champion && champion.place && champion.place.place_url, '우승자에 place.place_url이 없음');
+
+  const matchingCandidate = candidates20.find((c) => c.place_url === champion.place.place_url);
+  assert.ok(matchingCandidate, `우승자 place_url(${champion.place.place_url})이 원본 후보 중 어느 것과도 일치하지 않음(가짜 링크 의심)`);
+  assert.strictEqual(champion.place, matchingCandidate, '우승자 place가 원본 후보 객체와 참조 동일하지 않음(가짜/복제 식당 의심)');
+
+  return {
+    status: 'PASS',
+    detail: `16강~결승 총 ${matchCount}경기 완주, 우승자 place_url="${champion.place.place_url}"이 원본 후보와 문자열·참조 모두 일치`,
+  };
+});
+
+// ─────────────────────────────────────────────────────────────────────────
 // 결과 출력
 // ─────────────────────────────────────────────────────────────────────────
 console.log('');
-console.log('=== 도메인 오라클 점검 결과 (D1~D10) ===');
+console.log('=== 도메인 오라클 점검 결과 (D1~D15) ===');
 console.log('');
 let passed = 0;
 let failed = 0;

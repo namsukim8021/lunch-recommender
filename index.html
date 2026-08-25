@@ -203,7 +203,19 @@
     font-size: 1.3rem;
   }
 
+  /* 탭2/3(#result-card 밖) 재사용 지점용 — 위 규칙과 동일 값을 스코프 없이 복제 */
+  .place-name {
+    margin: 0 0 6px;
+    font-size: 1.3rem;
+  }
+
   #result-card .place-category {
+    margin: 0 0 8px;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  .place-category {
     margin: 0 0 8px;
     color: var(--muted);
     font-size: 0.9rem;
@@ -214,7 +226,18 @@
     font-weight: 600;
   }
 
+  .place-hint {
+    margin: 0 0 8px;
+    font-weight: 600;
+  }
+
   #result-card .place-distance {
+    margin: 0 0 12px;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  .place-distance {
     margin: 0 0 12px;
     color: var(--muted);
     font-size: 0.9rem;
@@ -232,7 +255,25 @@
     text-decoration: underline;
   }
 
+  .place-link {
+    display: inline-block;
+    color: var(--link);
+    font-weight: 600;
+    text-decoration: none;
+    margin-bottom: 12px;
+  }
+
+  .place-link:hover {
+    text-decoration: underline;
+  }
+
   #result-card .place-disclaimer {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+
+  .place-disclaimer {
     margin: 0;
     font-size: 0.78rem;
     color: var(--muted);
@@ -308,6 +349,138 @@
   [hidden] {
     display: none !important;
   }
+
+  /* ---------- 탭바 ---------- */
+  .tab-bar {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+
+  .tab-btn {
+    flex: 1 1 auto;
+    padding: 10px 6px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--card-bg);
+    color: var(--muted);
+    cursor: pointer;
+  }
+
+  .tab-btn.active {
+    background: var(--accent);
+    color: var(--accent-text);
+    border-color: var(--accent);
+  }
+
+  .tab-panel {
+    /* hidden 속성으로 표시/숨김을 제어(라우팅 없음) */
+  }
+
+  /* ---------- 모락모락(탭2) ---------- */
+  .mm-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 14px;
+    margin-bottom: 12px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .mm-card img {
+    width: 72px;
+    height: 72px;
+    border-radius: 12px;
+    object-fit: cover;
+    background: var(--border);
+    flex: 0 0 auto;
+  }
+
+  .mm-card .mm-body {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .mm-corner {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+
+  .mm-name-ko {
+    font-size: 1rem;
+    font-weight: 700;
+    margin: 0 0 2px;
+  }
+
+  .mm-name-en {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin: 0 0 6px;
+  }
+
+  .mm-kcal {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin: 0 0 4px;
+  }
+
+  .mm-sides {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin: 0;
+  }
+
+  /* ---------- 점심 월드컵(탭3) ---------- */
+  .wc-row {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    margin: 12px 0;
+  }
+
+  .wc-vs {
+    align-self: center;
+    font-weight: 700;
+    color: var(--muted);
+    flex: 0 0 auto;
+  }
+
+  .wc-option {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 18px 10px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    cursor: pointer;
+    text-align: center;
+  }
+
+  .wc-option:hover,
+  .wc-option:focus-visible {
+    border-color: var(--accent);
+  }
+
+  .wc-emoji {
+    font-size: 2.2rem;
+    line-height: 1;
+  }
+
+  #worldcup-round-label {
+    text-align: center;
+    margin: 0;
+  }
 </style>
 </head>
 <body>
@@ -319,6 +492,13 @@
     <p>회사 주변에서, 최근이랑 안 겹치게 골라드려요</p>
   </header>
 
+  <nav id="tab-bar" class="tab-bar">
+    <button id="tab1-btn" type="button" class="tab-btn active" aria-selected="true">🍚 오늘 점심 추천</button>
+    <button id="tab2-btn" type="button" class="tab-btn" aria-selected="false">🍱 모락모락</button>
+    <button id="tab3-btn" type="button" class="tab-btn" aria-selected="false">🏆 점심 월드컵</button>
+  </nav>
+
+  <section id="tab1-panel" class="tab-panel">
   <button id="recommend-btn" class="primary-btn" type="button" disabled>🍚 오늘 점심 추천</button>
 
   <div id="status-msg" class="status-msg" hidden></div>
@@ -361,8 +541,54 @@
       <ul id="help-modal-body" class="help-modal-body"></ul>
     </div>
   </div>
+  </section>
+
+  <section id="tab2-panel" class="tab-panel" hidden>
+    <p id="moremore-status" class="status-msg" role="status">불러오는 중…</p>
+    <div id="moremore-list" hidden></div>
+    <section id="moremore-preparing" class="card" hidden>
+      <p><strong>준비중입니다</strong></p>
+      <p class="place-disclaimer">오늘의 메뉴를 불러오지 못했습니다. 사내 네트워크·CORS 정책에 따라 접속이 제한될 수 있습니다.</p>
+    </section>
+  </section>
+
+  <section id="tab3-panel" class="tab-panel" hidden>
+    <p id="worldcup-status" class="status-msg" role="status" hidden></p>
+    <section id="worldcup-insufficient" class="card" hidden>
+      <p><strong>대표 메뉴가 16개 미만입니다</strong></p>
+      <p>반경을 넓히면 더 많은 메뉴가 모여요.</p>
+      <button id="worldcup-expand-btn" type="button" class="secondary-btn">반경 확대</button>
+    </section>
+    <section id="worldcup-match" class="card" hidden>
+      <p id="worldcup-round-label" class="place-category"></p>
+      <div class="wc-row">
+        <button id="wc-left" type="button" class="wc-option">
+          <span id="wc-left-emoji" class="wc-emoji"></span>
+          <span id="wc-left-menu" class="place-hint"></span>
+          <span id="wc-left-place" class="place-category"></span>
+        </button>
+        <span class="wc-vs">VS</span>
+        <button id="wc-right" type="button" class="wc-option">
+          <span id="wc-right-emoji" class="wc-emoji"></span>
+          <span id="wc-right-menu" class="place-hint"></span>
+          <span id="wc-right-place" class="place-category"></span>
+        </button>
+      </div>
+      <p class="place-disclaimer">이미지는 카테고리 기반 아이콘입니다 · 실제 메뉴 사진이 아닙니다.</p>
+    </section>
+    <section id="worldcup-result" class="card" hidden>
+      <p class="place-name">🏆 우승 메뉴</p>
+      <p id="wc-winner-menu" class="place-name"></p>
+      <p id="wc-winner-place" class="place-category"></p>
+      <a id="wc-winner-link" class="place-link" href="#" target="_blank" rel="noopener noreferrer">카카오맵에서 보기</a>
+      <button id="worldcup-restart-btn" type="button" class="secondary-btn">다시 하기</button>
+    </section>
+  </section>
 
   <script src="config.js"></script>
   <script type="module" src="app.js"></script>
+  <script type="module" src="tabs.js"></script>
+  <script type="module" src="moremore.js"></script>
+  <script type="module" src="worldcup.js"></script>
 </body>
 </html>

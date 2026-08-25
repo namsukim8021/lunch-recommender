@@ -31,3 +31,5 @@
 
 ## 현재 상태
 Phase 0~4.6(스펙/설계/오라클/트랙) 문서화 완료 + **Phase 5(구현) 완료** — `config.js`/`lib/core.js`/`app.js`/`index.html` 생성, 난수원 주입(`pickRandom(list, rng)`)·계측(`elapsedMs`/`searchCalls`/`candidateCount`) 배선됨. 도메인 오라클(D1~D10) 자동 점검기 + 분포 판정기(D10) = `scripts/oracle-check.mjs`. **Phase 6(배포) 미착수** — GitHub Pages 미활성화, golden 스냅샷 미박제(바이너리 오라클은 여전히 콜드 스타트).
+
+**3탭 확장** — 탭2 모락모락(구내식당 오늘의 메뉴, 브라우저 직접 fetch)·탭3 점심메뉴 월드컵(탭1 실제 후보 재사용 16강 토너먼트) 관련 문서(`docs/spec.md`·`docs/plan.md`·`docs/oracle.md`·`docs/tracks.md`·`docs/tasks.md` Phase 5.5) 갱신 완료(신규 AC·도메인 D12~D15 정의, [oracle.md](docs/oracle.md)·[tracks.md §3-3](docs/tracks.md)). **구현·검증 완료(오라클 D1~D15 17/17 PASS)** — `lib/core.js`/`app.js`(getter 노출 1줄)/`moremore.js`/`worldcup.js`/`tabs.js`/`index.html`/`config.js`/`scripts/oracle-check.mjs` 반영됨.
