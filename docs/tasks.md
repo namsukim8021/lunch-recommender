@@ -47,6 +47,7 @@
 - [x] 5.7 **후보 0 UX**(안내 + 반경 확대/이력 초기화) · 모바일·다크모드 · 에러 폴백(키 미설정/지오코딩·검색 실패)
 - [x] 5.8 (선택) 카테고리 필터(한식/양식 등)
 - [x] 5.9 **계측 배선** — `elapsedMs`·`searchCalls`·`candidateCount`를 `localStorage["lunch_metrics"]` 링버퍼에 기록(Signal Track 관측점, [plan.md](plan.md) 계측)
+- [x] 5.10 (추가) 추천 로직 설명 팝업 — 타이틀 옆 '?' 아이콘 → 레이어 팝업, config 값 기반 동적 설명
 
 ## Phase 6 — 배포
 - [ ] `.nojekyll` + GitHub Pages 활성화(main / root)

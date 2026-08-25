@@ -23,5 +23,6 @@
 
 | 10 | 2026-08-12 | 스터디 4회차(검증 트랙 5종: Regression/Migration/Extension/Signal/Probabilistic + BluePill·Shadow Diff) 발표자료 내용을 고려해 이 레포도 개선하고 PR 생성해줘. | `docs/tracks.md` 신설(트랙 5종 ↔ 이 프로젝트, 트랙별 **선행 조건**과 현재 가부) + 갭 2건 반영: **Signal 관측점 부재** → plan.md 계측 설계(`elapsedMs`·`searchCalls`·`candidateCount`) · **Probabilistic 요구 부재** → spec §4·§6 분포 요구 + 도메인 **D10**(쏠림 없음). oracle.md 판정표에 트랙 열·미러 동기화, CLAUDE.md·sdd-cycle에 "트랙 선택" 단계, tasks Phase 4.6 신설 + 5.4/5.9에 선행 조건 명시 |
 | 11 | 2026-08-25 | harness 기반으로 준비 중이던 이 레포에 대해 인터뷰 형식으로 미확정 사항(Kakao 앱키 보유 여부·구현 범위·`RADIUS` 값·자동 오라클 검증기 포함 여부)을 먼저 확인한 뒤, Phase 5(화면 구현: `config.js`/`lib/core.js`/`app.js`/`index.html`) 전체와 도메인 오라클 자동 검증기(`scripts/oracle-check.mjs`)를 함께 구현해줘. | 인터뷰로 미확정 항목 확정(앱키 보유·범위·RADIUS·오라클 자동검증 포함) 후 Phase 5 전체 구현(지도·격자검색·필터·메뉴힌트·난수원 주입·이력·계측) + `scripts/oracle-check.mjs`(도메인 D1~D10 자동 점검 + D10 분포 판정기) 동시 작성. tasks/README/CLAUDE.md/tracks.md/oracle.md 진행상태 갱신 |
+| 12 | 2026-08-25 | 배포 확인 완료 후, 추천 로직을 궁금해하는 사용자를 위해 타이틀 옆 '?' 아이콘 → 클릭 시 레이어 팝업으로 추천 로직 설명(반경/야간업종 제외/최근이력 제외/랜덤선택/메뉴힌트 근거, config 값 기반 동적 생성)을 추가. | spec.md(UC5·성공기준)·plan.md(UI 절)·tasks.md(5.10) 갱신 |
 
 <!-- 다음 요청부터 아래에 이어서 기록 -->
