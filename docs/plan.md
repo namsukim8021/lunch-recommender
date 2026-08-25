@@ -7,11 +7,16 @@
 순수 정적 SPA(단일 `index.html` + 바닐라 JS). 프레임워크·빌드 없음. 서버 없음.
 
 ```
+[GitHub Actions 예약 워크플로 (평일 KST 09:00 cron + workflow_dispatch)]
+  scripts/fetch-moremore.mjs → 풀무원 모락모락 API 서버사이드 호출 → data/moremore-latest.json 커밋
+      │ (같은 오리진 정적 파일)
+      ▼
 [브라우저]
   index.html + app.js + config.js
       │
       ├─ Kakao Maps JS SDK (libraries=services)  → 반경 내 음식점(FD6) 검색
       ├─ localStorage                            → 최근 추천 이력(안 겹치게)
+      ├─ data/moremore-latest.json fetch          → 탭2 모락모락 오늘의 메뉴(같은 오리진, CORS 없음)
       └─ 지도 렌더 + 결과 카드 + 카카오맵 링크
 ```
 
@@ -22,16 +27,28 @@
     ├─ config.js                          → 전역 설정(window.LUNCH_CONFIG)
     ├─ 탭1(기본, hidden 토글) — app.js     → 위 다이어그램 그대로(무변경)
     │     └─ window.__lunchTab1 getter 노출 (candidates/center/radius/hasSearchedOnce)
-    ├─ 탭2 모락모락(hidden 토글) — moremore.js → 풀무원 모락모락 API 직접 fetch(POST)
+    ├─ 탭2 모락모락(hidden 토글) — moremore.js → 같은 오리진 data/moremore-latest.json fetch(Actions 크롤러가 커밋)
     └─ 탭3 월드컵(hidden 토글) — worldcup.js   → window.__lunchTab1 재사용 우선, 없으면 lib/core.js로 자체 수집
   tabs.js                                  → 탭 전환(활성 탭만 표시, 페이지 이동/라우팅 없음)
 ```
 **신규 파일**: `tabs.js`(탭 전환) · `moremore.js`(모락모락 데이터소스+렌더) · `worldcup.js`(월드컵 풀 구성+브래킷+렌더). 기존 `app.js`/`lib/core.js`/`config.js`/`index.html`의 파일 구조 원칙(ES 모듈, 단일 파일)은 유지하고, 위 3개 파일만 추가된다.
 
 ## 모락모락(탭2) 데이터소스
-- 엔드포인트: `https://puls2.pulmuone.com/src/sql/menu/today_sql.php` (POST, 브라우저에서 직접 fetch — 서버 프록시 없음, constitution 1 · spec §7).
+- **아키텍처 전환 배경**: 브라우저에서 `puls2.pulmuone.com`을 직접 `fetch()`하면 **CORS로 실제 차단됨을 실측 확인**(응답에 `Access-Control-Allow-Origin` 헤더 없음). 반대로 **GitHub Actions 러너에서 서버사이드로 호출하면 정상 조회됨을 실측 검증**(HTTP 200, 실 데이터 수신 — `.github/workflows/verify-moremore-fetch.yml`). 그래서 데이터소스를 아래처럼 바꾼다.
+  ```
+  [GitHub Actions 예약 워크플로 (평일 KST 09:00 cron + workflow_dispatch)]
+        │ scripts/fetch-moremore.mjs 실행 — 서버사이드 fetch(Node 내장 fetch만 사용, 외부 의존성 0개)
+        ▼
+  [data/moremore-latest.json 레포 커밋]   { fetchedDate: "YYYYMMDD"(KST), raw: {data: [...]} }
+        │ (같은 오리진 정적 파일 — CORS 문제 자체가 사라짐)
+        ▼
+  [moremore.js]  fetch('data/moremore-latest.json') → parseMoremoreResponse(raw) + isFreshMoremoreData(fetchedDate, today) → 화면
+  ```
+  - `moremore.js`는 더 이상 `puls2.pulmuone.com`을 직접 호출하지 않는다. 같은 오리진의 정적 파일 `data/moremore-latest.json`을 fetch할 뿐이다 — 백엔드 없음 원칙(constitution 1)은 유지된다. GitHub Actions는 요청마다 응답하는 상시 서버가 아니라 **예약 빌드 작업**이기 때문이다(spec §7).
+  - 아래 엔드포인트·요청바디·필드 인덱스 매핑은 그대로 유효하다. 다만 이 호출은 이제 브라우저가 아니라 **`scripts/fetch-moremore.mjs`(Actions 워크플로 안)에서** 일어난다.
+- 엔드포인트: `https://puls2.pulmuone.com/src/sql/menu/today_sql.php` (POST, **Actions 워크플로의 `scripts/fetch-moremore.mjs`가 서버사이드에서 호출**).
 - 요청 바디(`application/x-www-form-urlencoded`): `requestId=search_schMenu&requestUrl=%2Fsrc%2Fsql%2Fmenu%2Ftoday_sql.php&requestMode=1&requestParam=<JSON을 url-encode>`.
-  - `requestParam` JSON: `{"srchOperCd":"O000002","srchAssignCd":"S000758","srchCurDay":"<오늘 YYYYMMDD, KST, 매 호출 동적생성>","srchCurShopclsCd":"","custCd":""}`.
+  - `requestParam` JSON: `{"srchOperCd":"O000002","srchAssignCd":"S000758","srchCurDay":"<실행 시점 YYYYMMDD, KST, 매 실행 동적생성>","srchCurShopclsCd":"","custCd":""}`.
 - 응답: `{"data":[[...],...]}`. 사용 필드(배열 인덱스, 0-based) — 아래 표 외 인덱스는 미사용(창작 금지, constitution 3):
 
 | 인덱스 | 의미 | 비고 |
@@ -44,12 +61,23 @@
 | 6 | 코너명 | 백반/스페셜/TAKEOUT 등 |
 | 12 | 영문명 | `null` 가능 |
 
-- **3경로 통합 실패처리**: 아래 세 경로 모두 동일한 하나의 "준비중입니다" 안내로 귀결한다.
-  1. fetch 실패(CORS 차단·네트워크 오류·비2xx 응답)
-  2. 응답은 200이지만 `data`가 빈 배열
+- **저장 형식**: `scripts/fetch-moremore.mjs`가 위 API 원본 응답을 감싸 `data/moremore-latest.json`에 커밋한다 — `{ fetchedDate: "YYYYMMDD"(KST, 실행 시점), raw: {data: [...]} }`. `raw`는 풀무원 API 원본 응답 그대로(가공 없음) — 파싱(`parseMoremoreResponse`)은 여전히 브라우저(`moremore.js`) 쪽 책임이다.
+- **4경로 통합 실패처리**(기존 3경로 + 날짜 불일치 신설): 아래 네 경로 모두 동일한 하나의 "준비중입니다" 안내로 귀결한다.
+  1. fetch 실패(네트워크 오류·비2xx 응답) — 대상이 같은 오리진 정적 파일로 바뀌어 CORS 차단 경로는 사실상 사라졌지만, 파일 부재·네트워크 오류는 여전히 가능
+  2. 응답은 200이지만 `raw.data`가 빈 배열
   3. 파싱 중 예외(필드 형식이 기대와 다름 등)
-  - 파싱 함수는 **절대 throw하지 않고** 항상 `{ ready: boolean, items: [...] }` 형태를 반환한다(호출부가 성공/실패를 분기하지 않고 `ready` 하나만 보면 되게).
+  4. **날짜 불일치** — `fetchedDate !== 오늘(KST) 날짜`. 신규 순수함수 `isFreshMoremoreData(fetchedDate, todayDate)`(둘 다 "YYYYMMDD" 문자열, 동일하면 `true`)로 판정한다. Actions 갱신이 실패·지연되면 구 데이터가 파일에 남아있어도 "오늘 메뉴"로 오인시키지 않기 위함(창작 금지)
+  - 파싱 함수(`parseMoremoreResponse`)는 **절대 throw하지 않고** 항상 `{ ready: boolean, items: [...] }` 형태를 반환한다(호출부가 성공/실패를 분기하지 않고 `ready` 하나만 보면 되게). `isFreshMoremoreData`는 파싱과 별개의 순수함수이며, `moremore.js`는 `ready && isFreshMoremoreData(fetchedDate, todayKst)` 모두 참일 때만 정상 렌더한다.
 - 화면: 코너별 카드(이미지·kcal·한글/영문명·사이드메뉴). 만족도 평가·저장 등은 범위 밖(백엔드 없음, spec §7).
+
+## 모락모락 크롤러 워크플로 (`.github/workflows/moremore-fetch.yml`)
+- **스케줄**: 평일 KST 09:00 = UTC 00:00 → `cron: '0 0 * * 1-5'`(월~금) + `workflow_dispatch`(수동 실행 병행 — 즉시 갱신·디버깅용).
+- **권한**: 워크플로 상단에 `permissions: contents: write`를 명시한다. 레포 기본 워크플로 토큰 권한이 read이므로, 이 워크플로가 `data/moremore-latest.json`을 커밋하려면 명시적으로 write를 열어야 한다.
+- **실행 흐름**:
+  1. 체크아웃
+  2. Node로 `scripts/fetch-moremore.mjs` 실행 — 위 절의 엔드포인트/요청바디로 풀무원 API를 서버사이드 fetch하고, 응답을 `{ fetchedDate, raw }` 형태로 `data/moremore-latest.json`에 씀
+  3. 변경분이 있으면(무변경일 수도 있음 — 같은 날 재실행 등) git commit + push
+- **기존 진단용 워크플로와의 관계**: `.github/workflows/verify-moremore-fetch.yml`(Actions 러너에서 서버사이드 호출이 실제로 되는지 1회성으로 확인한 진단 워크플로, `workflow_dispatch`만·커밋 없음)은 위 CORS 실증 배경조사에 쓰였다. `moremore-fetch.yml`은 이를 대체하는 **운영용** 예약 워크플로다(스케줄 + 실제 데이터 커밋까지 포함).
 
 ## 점심메뉴 월드컵(탭3)
 - 참가 16개, 16강(8경기)→8강(4경기)→4강(2경기)→결승(1경기), 총 15경기.
@@ -157,9 +185,9 @@ window.LUNCH_CONFIG = {
     "양식": ["파스타","스테이크"], "중식": ["짜장면","짬뽕"], "일식": ["초밥","돈카츠","우동"],
     "분식": ["떡볶이","김밥"], "한식": ["백반","찌개","비빔밥"], "아시아음식": ["쌀국수","팟타이"],
   },
-  MOREMORE_API_URL: "https://puls2.pulmuone.com/src/sql/menu/today_sql.php",
-  MOREMORE_SRCH_OPER_CD: "O000002",
-  MOREMORE_SRCH_ASSIGN_CD: "S000758",
+  // MOREMORE_API_URL/SRCH_OPER_CD/SRCH_ASSIGN_CD 는 config.js 에 없다 —
+  // 클라이언트가 더 이상 직접 호출하지 않으며(CORS 차단 확인, 모락모락 데이터소스 절 참조),
+  // 이 값들은 scripts/fetch-moremore.mjs 안의 상수로 옮겨졌다(Actions 크롤러 전용).
   WORLDCUP_POOL_SIZE: 16,
   WORLDCUP_CATEGORY_EMOJI: { // 카테고리(리프)→이모지 매핑, 매칭 없으면 폴백 이모지 사용
     "한식": "🍚", "양식": "🍝", "중식": "🥟", "일식": "🍣", "분식": "🍢", "아시아음식": "🍜",
@@ -187,7 +215,7 @@ window.LUNCH_CONFIG = {
 - **난수원 주입이 실제로 되는가** — 고정 시드 PRNG를 주입했을 때 같은 입력에 같은 추천이 재현되는가(Regression·Probabilistic 두 트랙의 전제).
 - **추천 분포가 균등한가** — 고정 후보집합·고정 시드로 대량 시행 시 특정 후보 쏠림이 없는가(D10).
 - **계측값이 기록되는가** — `elapsedMs`·`searchCalls`·`candidateCount`가 추천마다 남는가.
-- **모락모락 3경로**가 모두 같은 "준비중입니다"로 귀결하는가(fetch 실패/빈 data/파싱 예외 3가지 모두 확인).
+- **모락모락 4경로**가 모두 같은 "준비중입니다"로 귀결하는가(fetch 실패/빈 data/파싱 예외/날짜 불일치 4가지 모두 확인, `isFreshMoremoreData` 포함).
 - **월드컵 라운드 축소**가 매번 정확히 절반이고 패자가 재등장하지 않는가(16→8→4→2→1).
 - **월드컵 결정성** — 주입 가능 rng로 16개 추출 시 같은 시드에서 같은 참가 풀이 재현되는가.
 - **후보 부족 처리** — 유효 힌트 보유 후보가 16개 미만일 때 지어내지 않고 안내되는가.

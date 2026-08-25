@@ -14,9 +14,6 @@ window.LUNCH_CONFIG = {
     "양식": ["파스타","스테이크"], "중식": ["짜장면","짬뽕"], "일식": ["초밥","돈카츠","우동"],
     "분식": ["떡볶이","김밥"], "한식": ["백반","찌개","비빔밥"], "아시아음식": ["쌀국수","팟타이"],
   },
-  MOREMORE_API_URL: "https://puls2.pulmuone.com/src/sql/menu/today_sql.php",
-  MOREMORE_SRCH_OPER_CD: "O000002",
-  MOREMORE_SRCH_ASSIGN_CD: "S000758",
   WORLDCUP_POOL_SIZE: 16,
   WORLDCUP_CATEGORY_EMOJI: {
     "한식": "🍚", "양식": "🍝", "중식": "🥟", "일식": "🍣", "분식": "🍢", "아시아음식": "🍜",

@@ -26,6 +26,7 @@ import {
   mergeGridResults,
   geocodeAddress,
   parseMoremoreResponse,
+  isFreshMoremoreData,
   buildWorldcupPool,
   pairMatches,
   nextRoundParticipants,
@@ -436,9 +437,9 @@ await runCheck('D11', '부가 계약 점검: dedupeById/updateRecent/mergeGridRe
 });
 
 // ─────────────────────────────────────────────────────────────────────────
-// D12: 모락모락 3경로 통합 · 창작 금지
+// D12: 모락모락 4경로 통합 · 창작 금지 (fetch실패/빈data/파싱예외/날짜불일치)
 // ─────────────────────────────────────────────────────────────────────────
-await runCheck('D12', 'parseMoremoreResponse: 3경로(fetch실패/빈data/파싱예외) 동일 귀결 + 필드 창작 금지', async () => {
+await runCheck('D12', 'parseMoremoreResponse + isFreshMoremoreData: 4경로(fetch실패/빈data/파싱예외/날짜불일치) 동일 귀결 + 필드 창작 금지', async () => {
   // 모의 응답 행: index 1=nameKo 2=kcal 3=이미지baseURL 4=이미지파일명 5=sides 6=corner 12=nameEn
   function makeRow({ nameKo, kcal = null, imgBase = null, imgFile = null, sidesStr = null, corner = null, nameEn = null }) {
     const row = new Array(13).fill(null);
@@ -521,9 +522,35 @@ await runCheck('D12', 'parseMoremoreResponse: 3경로(fetch실패/빈data/파싱
     assert.ok(Array.isArray(out.items) && out.items.length === 0, `입력 ${JSON.stringify(input)}에서 items가 빈 배열이 아님`);
   }
 
+  // 4번째 경로: 날짜 불일치(isFreshMoremoreData) — 파싱은 정상(ready:true)이어도
+  // moremore.js는 ready && isFreshMoremoreData(...) 모두 참일 때만 정상 렌더해야 하므로,
+  // isFreshMoremoreData 자체의 계약(정확 일치만 true, 그 외 전부 예외 없이 false)을 별도 검증한다.
+  const freshnessCases = [
+    { fetchedDate: '20260825', todayDate: '20260825', expected: true, label: '같은 날짜' },
+    { fetchedDate: '20260824', todayDate: '20260825', expected: false, label: '어제 데이터(하루 전)' },
+    { fetchedDate: '20260826', todayDate: '20260825', expected: false, label: '미래 날짜' },
+    { fetchedDate: null, todayDate: '20260825', expected: false, label: 'fetchedDate=null' },
+    { fetchedDate: '20260825', todayDate: undefined, expected: false, label: 'todayDate=undefined' },
+    { fetchedDate: '2026-08-25', todayDate: '20260825', expected: false, label: '형식 다름(하이픈 포함, 정확 일치 아님)' },
+    { fetchedDate: '', todayDate: '', expected: false, label: '빈 문자열끼리(길이 8 아님 → 신선 오판 방지)' },
+  ];
+  const freshnessDetails = [];
+  for (const { fetchedDate, todayDate, expected, label } of freshnessCases) {
+    let actual;
+    assert.doesNotThrow(() => {
+      actual = isFreshMoremoreData(fetchedDate, todayDate);
+    }, `isFreshMoremoreData(${JSON.stringify(fetchedDate)}, ${JSON.stringify(todayDate)})에서 throw 발생(예외 없이 false여야 함)`);
+    assert.strictEqual(
+      actual,
+      expected,
+      `isFreshMoremoreData(${JSON.stringify(fetchedDate)}, ${JSON.stringify(todayDate)}) [${label}] → ${actual}, 기대값 ${expected}`,
+    );
+    freshnessDetails.push(`${label}→${actual} OK`);
+  }
+
   return {
     status: 'PASS',
-    detail: `정상 3행 파싱(콤마kcal/kcal0/파싱불가kcal 확인, 필드 6개 정확 일치, 빈 nameKo 제외) + 이상입력 ${abnormalInputs.length}종 전부 {ready:false, items:[]} 귀결`,
+    detail: `정상 3행 파싱(콤마kcal/kcal0/파싱불가kcal 확인, 필드 6개 정확 일치, 빈 nameKo 제외) + 이상입력 ${abnormalInputs.length}종 전부 {ready:false, items:[]} 귀결 + 4번째경로(날짜불일치) isFreshMoremoreData ${freshnessCases.length}종 확인: ${freshnessDetails.join('; ')}`,
   };
 });
 

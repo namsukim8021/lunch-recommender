@@ -61,9 +61,18 @@
 - [x] `config.js`에 `MOREMORE_API_URL`·`MOREMORE_SRCH_OPER_CD`·`MOREMORE_SRCH_ASSIGN_CD`·`WORLDCUP_POOL_SIZE`·`WORLDCUP_CATEGORY_EMOJI` 추가
 - [x] `scripts/oracle-check.mjs`에 D12~D15 점검 추가(`runCheck` 패턴)
 
+## Phase 5.6 — 모락모락 CORS 우회(Actions 크롤러)
+> 배경: 브라우저 직접 fetch는 CORS로 실제 차단됨을 실측 확인(응답에 `Access-Control-Allow-Origin` 없음), GitHub Actions 러너에서 서버사이드로 호출하면 정상 조회됨을 실측 검증(HTTP 200, 실 데이터 수신 — `.github/workflows/verify-moremore-fetch.yml`). 아키텍처를 "브라우저 직접 fetch"에서 "GitHub Actions 예약 워크플로가 서버사이드로 수집해 `data/moremore-latest.json`으로 커밋 → `moremore.js`가 같은 오리진에서 fetch"로 전환한다(spec.md §4/§8, plan.md 모락모락 데이터소스, oracle.md D12 4경로 확장). Extension 트랙([tracks.md §3-3](tracks.md))으로 판정 — 구현·검증 완료(node scripts/oracle-check.mjs 17 passed / 0 failed).
+- [x] `scripts/fetch-moremore.mjs` 작성 — Node 내장 fetch만 사용(외부 의존성 0개, `scripts/oracle-check.mjs`와 같은 관례), 풀무원 API 서버사이드 호출 → `data/moremore-latest.json`(`{fetchedDate, raw}`) 작성
+- [x] `.github/workflows/moremore-fetch.yml` 작성(평일 KST 09:00 cron `0 0 * * 1-5` + `workflow_dispatch`, `permissions: contents: write`, `scripts/fetch-moremore.mjs` 실행 → 변경분 커밋) — 진단용 `.github/workflows/verify-moremore-fetch.yml` 교체
+- [x] `lib/core.js`에 `isFreshMoremoreData(fetchedDate, todayDate)` 순수함수 추가(둘 다 "YYYYMMDD" 문자열, 동일하면 true)
+- [x] `moremore.js` 데이터소스 전환 — `puls2.pulmuone.com` 직접 fetch 제거, 같은 오리진 `data/moremore-latest.json` fetch + `ready && isFreshMoremoreData(...)` 모두 참일 때만 렌더(4경로 통합 실패처리)
+- [x] `data/moremore-latest.json` 최초 커밋(Actions 워크플로 최초 1회 실행 또는 수동)
+- [x] `scripts/oracle-check.mjs` D12 확장 — 4경로(기존 3경로 + 날짜 불일치) 판정 + `isFreshMoremoreData` 계약 점검 추가
+
 ## Phase 6 — 배포
 - [ ] `.nojekyll` + GitHub Pages 활성화(main / root)
 - [ ] Kakao 앱키 허용 도메인에 Pages 도메인 등록
 - [ ] 실기기(모바일) 확인 → 성공기준(spec §6) 검증
 
-> 문서 범위: **Phase 0~4 + 4.5 + 4.6 + 5(구현) 완료**. Phase 6(배포)은 다음 단계.
+> 문서 범위: **Phase 0~4 + 4.5 + 4.6 + 5(구현) + 5.5(3탭 확장) + 5.6(모락모락 Actions 크롤러 전환) 완료**. Phase 6(배포)은 다음 단계.
