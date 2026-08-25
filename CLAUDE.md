@@ -30,5 +30,4 @@
 - 요청 프롬프트는 `PROMPTS.md`에 누적한다. **public 레포**이므로 사내 기밀·시크릿은 기록 금지.
 
 ## 현재 상태
-Phase 0~4(스펙/설계) + 4.5(오라클) + 4.6(검증 트랙) **문서화 완료** — 단 자동 점검기(도메인 D1~D10 점검·golden 박제·분포 판정기)는 Phase 5. **구현(Phase 5, Kakao 연동) 미착수.** 유일 blocker = Kakao JS 앱키.
-Phase 5 착수 시 **반드시 함께 넣어야 하는 것**(빠뜨리면 트랙이 닫힘): ① 난수원 주입(`pickRandom(list, rng)`) ② 계측(`elapsedMs`·`searchCalls`·`candidateCount`).
+Phase 0~4.6(스펙/설계/오라클/트랙) 문서화 완료 + **Phase 5(구현) 완료** — `config.js`/`lib/core.js`/`app.js`/`index.html` 생성, 난수원 주입(`pickRandom(list, rng)`)·계측(`elapsedMs`/`searchCalls`/`candidateCount`) 배선됨. 도메인 오라클(D1~D10) 자동 점검기 + 분포 판정기(D10) = `scripts/oracle-check.mjs`. **Phase 6(배포) 미착수** — GitHub Pages 미활성화, golden 스냅샷 미박제(바이너리 오라클은 여전히 콜드 스타트).

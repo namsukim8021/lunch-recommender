@@ -109,8 +109,8 @@ PR·리뷰 때 한 줄 질문이 하나 늘어난다.
 |---|---|
 | Extension | 📝 판정 기준 확립(문서) · ⏳ 자동 실행은 Phase 5 |
 | Regression | 🔲 콜드 스타트 — 수용 시 golden 박제 |
-| Probabilistic | 🔲 미착수 — 분포 요구(`spec §4`·D10)는 정의됨, 판정기는 Phase 5 |
-| Signal | 🔲 미착수 — 계측 설계는 `plan.md`에 정의, 코드는 Phase 5 |
+| Probabilistic | ✅ 판정기 구현 — 분포 요구(`spec §4`·D10)는 정의됨, `scripts/oracle-check.mjs`에서 D10 카이제곱 검정 실행 |
+| Signal | ⏳ 관측점 확보 — `app.js`에 `elapsedMs`/`searchCalls`/`candidateCount` 계측 배선 완료(`localStorage["lunch_metrics"]`). 단 **베이스라인·실측 판정은 미실시**(배포 후 실사용 데이터 필요) — 진짜 Signal(σ(A) vs σ(A′))로 승격 전 |
 | Migration | ➖ 해당 없음 |
 
 <sub>📝 규칙/기준 정의됨 · ⏳ 자동 점검 미구현 · 🔲 미생성 · ➖ 해당 없음</sub>
