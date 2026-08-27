@@ -1,6 +1,6 @@
 // oracle-check.mjs
 // ─────────────────────────────────────────────────────────────────────────
-// 목적: docs/oracle.md 의 도메인 오라클 D1~D10 을 자동으로 점검한다.
+// 목적: docs/oracle.md 의 도메인 오라클 D1~D16 을 자동으로 점검한다.
 // "사람 눈 판정 금지" 원칙(oracle.md §2, .claude/skills/sdd-cycle)의 구현체 —
 // 시나리오(AC)로 정의되지 않은 입력·경로에서도 항상 성립해야 하는 불변식을
 // 모의(mock) 픽스처 + 고정 시드 PRNG로 기계적으로 검증한다.
@@ -27,6 +27,7 @@ import {
   geocodeAddress,
   parseMoremoreResponse,
   isFreshMoremoreData,
+  hasMoremoreItems,
   buildWorldcupPool,
   pairMatches,
   nextRoundParticipants,
@@ -735,10 +736,86 @@ await runCheck('D15', '전체 토너먼트 시뮬레이션: 최종 우승자 pla
 });
 
 // ─────────────────────────────────────────────────────────────────────────
+// D16: 크롤러 저장 게이트 — 빈/이상 응답으로 되돌리지 않되, 항목이 있으면 항상 반영
+// ─────────────────────────────────────────────────────────────────────────
+await runCheck('D16', 'hasMoremoreItems: 빈/스키마깨짐 응답만 false, 항목이 있으면 항상 true(부분 게시도 반영)', async () => {
+  const oneCorner = { data: [['010', '라면', '0', null, null, null, 'TAKEOUT']] };
+  const fiveCorners = {
+    data: [
+      ['010', '라면', '0'],
+      ['020', '쫄면순두부찌개', '939'],
+      ['030', '제육볶음', '820'],
+      ['040', '치킨마요덮밥', '760'],
+      ['050', '샐러드', '310'],
+    ],
+  };
+
+  // (a) 저장할 항목이 없는 응답 → false (있는 데이터를 빈 것으로 되돌리지 않는다)
+  assert.strictEqual(hasMoremoreItems({ data: [] }), false, '(a) 빈 배열인데 true');
+  assert.strictEqual(hasMoremoreItems(null), false, '(a) null 인데 true');
+  assert.strictEqual(hasMoremoreItems(undefined), false, '(a) undefined 인데 true');
+  assert.strictEqual(hasMoremoreItems({}), false, '(a) data 부재인데 true');
+  assert.strictEqual(hasMoremoreItems({ data: null }), false, '(a) data=null 인데 true');
+  assert.strictEqual(hasMoremoreItems({ data: 'error' }), false, '(a) data가 배열이 아닌데 true');
+  assert.strictEqual(hasMoremoreItems('error'), false, '(a) raw가 문자열인데 true');
+
+  // (b) non-empty 지만 원소 스키마가 깨진 응답 → false (parseMoremoreResponse 가 항목 0개로 보는 입력)
+  assert.strictEqual(hasMoremoreItems({ data: ['error'] }), false, '(b) 배열이 아닌 행만 있는데 true');
+  assert.strictEqual(hasMoremoreItems({ data: [['010']] }), false, '(b) row[1] 부재인데 true');
+  assert.strictEqual(hasMoremoreItems({ data: [['010', '']] }), false, '(b) row[1] 빈 문자열인데 true');
+  assert.strictEqual(hasMoremoreItems({ data: [['010', 123]] }), false, '(b) row[1] 비문자열인데 true');
+  assert.strictEqual(hasMoremoreItems({ data: [null, { a: 1 }] }), false, '(b) 항목 아닌 행들만 있는데 true');
+  // 깨진 행이 섞여 있어도 유효 행이 1개라도 있으면 저장한다(parseMoremoreResponse 가 걸러 렌더).
+  assert.strictEqual(hasMoremoreItems({ data: ['error', ['010', '라면']] }), true, '(b) 유효 행 1개가 있는데 false');
+
+  // (c) 부분 게시 — 코너 수와 무관하게 항상 true.
+  //     이른 슬롯이 1코너만 커밋해도 뒤 슬롯의 5코너 확정 메뉴가 반영돼야 한다(기존 게이트의 퇴행 지점).
+  //     반대로 5코너 → 1코너로 줄어드는 응답도 최신이 정답이므로 반영한다.
+  assert.strictEqual(hasMoremoreItems(oneCorner), true, '(c) 1코너 응답인데 false');
+  assert.strictEqual(hasMoremoreItems(fiveCorners), true, '(c) 5코너 응답인데 false');
+
+  // (d) 게이트 판정 기준이 parseMoremoreResponse 의 항목 판정과 일치한다(한쪽만 통과하는 입력이 없어야 함).
+  const samples = [
+    { data: [] },
+    { data: ['error'] },
+    { data: [['010']] },
+    { data: [['010', '']] },
+    { data: [['010', 123]] },
+    oneCorner,
+    fiveCorners,
+    { data: ['error', ['010', '라면']] },
+  ];
+  for (const sample of samples) {
+    const parsed = parseMoremoreResponse(sample);
+    assert.strictEqual(
+      hasMoremoreItems(sample),
+      parsed.ready,
+      `(d) 게이트와 parseMoremoreResponse.ready 불일치: ${JSON.stringify(sample)}`,
+    );
+  }
+
+  // (e) 실제 커밋된 산출물도 게이트를 통과해야 한다(픽스처만 통과하는 판정이 아님을 확인).
+  const latestPath = path.join(REPO_ROOT, 'data', 'moremore-latest.json');
+  let realDetail = 'data/moremore-latest.json 없음(스킵)';
+  if (existsSync(latestPath)) {
+    const saved = JSON.parse(readFileSync(latestPath, 'utf-8'));
+    assert.strictEqual(hasMoremoreItems(saved.raw), true, '(e) 커밋된 실데이터가 게이트를 통과하지 못함');
+    realDetail = `실데이터 통과(rows=${saved.raw.data.length})`;
+  }
+
+  return {
+    status: 'PASS',
+    detail:
+      '(a) 빈/비배열 7종 false OK; (b) 스키마 깨진 행 5종 false + 유효행 혼재 true OK; ' +
+      `(c) 1코너·5코너 모두 true(부분 게시 반영) OK; (d) parseMoremoreResponse.ready 와 8종 전부 일치 OK; (e) ${realDetail}`,
+  };
+});
+
+// ─────────────────────────────────────────────────────────────────────────
 // 결과 출력
 // ─────────────────────────────────────────────────────────────────────────
 console.log('');
-console.log('=== 도메인 오라클 점검 결과 (D1~D15) ===');
+console.log('=== 도메인 오라클 점검 결과 (D1~D16) ===');
 console.log('');
 let passed = 0;
 let failed = 0;

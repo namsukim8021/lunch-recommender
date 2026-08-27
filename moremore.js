@@ -10,6 +10,9 @@ import { parseMoremoreResponse, isFreshMoremoreData } from './lib/core.js';
 
 let loadedOnce = false;
 
+// 사진이 이 시간 안에 로드되지 않으면 실패로 간주해 대체 영역으로 넘긴다.
+const IMAGE_TIMEOUT_MS = 8000;
+
 function $(id) {
   return document.getElementById(id);
 }
@@ -49,9 +52,20 @@ function renderItems(items) {
 
   list.innerHTML = items
     .map((item) => {
+      // 이미지는 카드 상단 전면. onload/onerror 핸들러는 고정 문자열만 사용한다
+      // (원격/사용자 데이터를 절대 보간하지 않는다 — XSS). 로드 실패 시 .is-failed 가
+      // 붙으면 CSS 인접 선택자가 사진을 숨기고 바로 뒤의 대체 영역을 대신 띄운다.
       const img = item.imageUrl
-        ? `<img src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.nameKo)}" loading="lazy" />`
+        ? `<img class="mm-photo" src="${escapeHtml(item.imageUrl)}" alt="" loading="lazy" onload="this.classList.add('is-loaded')" onerror="this.classList.add('is-failed')" />`
         : '';
+      // 사진이 없거나(코너별 미제공·업로드 전) 로드에 실패한 경우의 대체 영역.
+      // 없는 사진을 지어내지 않는다(창작 금지). 문구는 "사진 없음" — 라면·석식처럼 끝내
+      // 이미지가 제공되지 않는 코너가 있어 "준비 전"은 오지 않을 사진을 약속하는 표현이 된다.
+      const mediaPlaceholder =
+        '<div class="mm-media-ph" role="img" aria-label="사진 없음">' +
+        '<span class="mm-ph-emoji" aria-hidden="true">🍽️</span>' +
+        '<p class="mm-ph-text">사진 없음</p>' +
+        '</div>';
       const nameEn = item.nameEn ? `<p class="mm-name-en">${escapeHtml(item.nameEn)}</p>` : '';
       const kcal = item.kcal !== null ? `<p class="mm-kcal">${escapeHtml(String(item.kcal))} kcal</p>` : '';
       const sides = item.sides.length
@@ -59,7 +73,7 @@ function renderItems(items) {
         : '';
       return `
         <div class="mm-card">
-          ${img}
+          ${img}${mediaPlaceholder}
           <div class="mm-body">
             <span class="mm-corner">${escapeHtml(item.corner || '')}</span>
             <p class="mm-name-ko">${escapeHtml(item.nameKo)}</p>
@@ -71,6 +85,15 @@ function renderItems(items) {
       `;
     })
     .join('');
+
+  // 이미지 요청이 응답도 에러도 없이 매달리면(CDN 지연·방화벽 drop) onload/onerror 가 모두
+  // 발화하지 않아 로딩 스켈레톤이 영구히 남는다. 일정 시간 뒤에도 미완인 사진은 실패로 간주해
+  // 대체 영역으로 넘긴다. img.complete 는 로드 완료(성공/실패 무관) 여부를 알려준다.
+  window.setTimeout(() => {
+    list.querySelectorAll('img.mm-photo').forEach((img) => {
+      if (!img.complete) img.classList.add('is-failed');
+    });
+  }, IMAGE_TIMEOUT_MS);
 
   list.hidden = false;
   if (preparing) preparing.hidden = true;
@@ -86,7 +109,10 @@ async function loadMoremore() {
 
   let res;
   try {
-    res = await fetch('data/moremore-latest.json');
+    // cache: 'no-cache' — 캐시를 쓰되 매번 서버에 재검증한다. 벤더가 당일 중 이미지·메뉴명을
+    // 갱신하고 크롤러가 그때마다 파일을 다시 커밋하므로, GitHub Pages 의 캐시 수명(수 분) 동안
+    // 낡은 파일이 잡히면 갱신분이 사용자에게 도달하지 않는다.
+    res = await fetch('data/moremore-latest.json', { cache: 'no-cache' });
   } catch (err) {
     // 네트워크 오류(경로 1)
     showPreparing();

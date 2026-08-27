@@ -53,7 +53,11 @@
 | 4.5 Oracle (정답기준) | [docs/oracle.md](docs/oracle.md) | ✅ 문서 (자동점검은 Phase 5) |
 | 4.6 Tracks (판정방법) | [docs/tracks.md](docs/tracks.md) | ✅ 문서 (판정기는 Phase 5) |
 | 5. Implement (구현) | `index.html` 등 | ✅ 완료 |
-| 5.5 3탭 확장 문서화(모락모락·월드컵) | [docs/tasks.md](docs/tasks.md) Phase 5.5 | 📝 문서 갱신 완료(구현 대기) |
+| 5.5 3탭 확장(모락모락·월드컵) | [docs/tasks.md](docs/tasks.md) Phase 5.5 | ✅ 구현·검증 완료(오라클 D1~D15 17/17 PASS) |
+| 5.6 모락모락 Actions 크롤러 전환 | [docs/tasks.md](docs/tasks.md) Phase 5.6 | ✅ 완료(CORS 실측 확인 → 서버사이드 크롤러 전환) |
+| 5.7 모락모락 예약 갱신 신뢰성 개선 | [docs/tasks.md](docs/tasks.md) Phase 5.7 | ✅ 완료(9슬롯 다중화·`hasMoremoreItems` 저장 게이트·워크플로 실패 신호, 오라클 D1~D16 18/18 PASS) |
+| 5.8 모락모락 카드 이미지 UI 개선 | [docs/tasks.md](docs/tasks.md) Phase 5.8 | ✅ 완료(원본 비율 렌더·플레이스홀더 폴백, 자동 오라클 없이 사람 판단으로 수용 — [docs/oracle.md](docs/oracle.md) §2) |
+| 5.9 모락모락 적대적 리뷰 반영 | [docs/tasks.md](docs/tasks.md) Phase 5.9 | ✅ 완료(실패신호 당일 마지막 슬롯 한정·캐시 재검증·이미지 hang 타임아웃·"사진 없음" 문구 정정, 오라클 18/18 PASS) |
 | 6. Deploy | GitHub Pages | 🔲 |
 
 ## 프롬프트 이력

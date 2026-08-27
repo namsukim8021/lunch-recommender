@@ -7,8 +7,8 @@
 순수 정적 SPA(단일 `index.html` + 바닐라 JS). 프레임워크·빌드 없음. 서버 없음.
 
 ```
-[GitHub Actions 예약 워크플로 (평일 KST 09:00 cron + workflow_dispatch)]
-  scripts/fetch-moremore.mjs → 풀무원 모락모락 API 서버사이드 호출 → data/moremore-latest.json 커밋
+[GitHub Actions 예약 워크플로 (평일 KST 9슬롯 재시도 cron + workflow_dispatch)]
+  scripts/fetch-moremore.mjs → 풀무원 모락모락 API 서버사이드 호출 → data/moremore-latest.json 커밋(hasMoremoreItems 게이트 — 빈/이상 응답이면 미갱신+워크플로 실패)
       │ (같은 오리진 정적 파일)
       ▼
 [브라우저]
@@ -36,8 +36,8 @@
 ## 모락모락(탭2) 데이터소스
 - **아키텍처 전환 배경**: 브라우저에서 `puls2.pulmuone.com`을 직접 `fetch()`하면 **CORS로 실제 차단됨을 실측 확인**(응답에 `Access-Control-Allow-Origin` 헤더 없음). 반대로 **GitHub Actions 러너에서 서버사이드로 호출하면 정상 조회됨을 실측 검증**(HTTP 200, 실 데이터 수신 — `.github/workflows/verify-moremore-fetch.yml`). 그래서 데이터소스를 아래처럼 바꾼다.
   ```
-  [GitHub Actions 예약 워크플로 (평일 KST 09:00 cron + workflow_dispatch)]
-        │ scripts/fetch-moremore.mjs 실행 — 서버사이드 fetch(Node 내장 fetch만 사용, 외부 의존성 0개)
+  [GitHub Actions 예약 워크플로 (평일 KST 9슬롯 재시도 cron + workflow_dispatch)]
+        │ scripts/fetch-moremore.mjs 실행 — 서버사이드 fetch(Node 내장 fetch만 사용, 외부 의존성 0개) + hasMoremoreItems 로 빈/이상 응답 저장 방지
         ▼
   [data/moremore-latest.json 레포 커밋]   { fetchedDate: "YYYYMMDD"(KST), raw: {data: [...]} }
         │ (같은 오리진 정적 파일 — CORS 문제 자체가 사라짐)
@@ -68,16 +68,46 @@
   3. 파싱 중 예외(필드 형식이 기대와 다름 등)
   4. **날짜 불일치** — `fetchedDate !== 오늘(KST) 날짜`. 신규 순수함수 `isFreshMoremoreData(fetchedDate, todayDate)`(둘 다 "YYYYMMDD" 문자열, 동일하면 `true`)로 판정한다. Actions 갱신이 실패·지연되면 구 데이터가 파일에 남아있어도 "오늘 메뉴"로 오인시키지 않기 위함(창작 금지)
   - 파싱 함수(`parseMoremoreResponse`)는 **절대 throw하지 않고** 항상 `{ ready: boolean, items: [...] }` 형태를 반환한다(호출부가 성공/실패를 분기하지 않고 `ready` 하나만 보면 되게). `isFreshMoremoreData`는 파싱과 별개의 순수함수이며, `moremore.js`는 `ready && isFreshMoremoreData(fetchedDate, todayKst)` 모두 참일 때만 정상 렌더한다.
+- **클라이언트 캐시 재검증**: `moremore.js`의 `fetch('data/moremore-latest.json', { cache: 'no-cache' })`는 캐시를 쓰되 매번 서버에 재검증한다. 벤더가 당일 중 이미지·메뉴명을 갱신하고 크롤러가 그때마다 파일을 다시 커밋하는데, GitHub Pages의 캐시 수명 동안 낡은 파일이 브라우저 캐시에 잡히면 갱신분이 사용자에게 도달하지 않기 때문이다.
 - 화면: 코너별 카드(이미지·kcal·한글/영문명·사이드메뉴). 만족도 평가·저장 등은 범위 밖(백엔드 없음, spec §7).
 
+## 모락모락 카드 UI — 사진 표시 (`moremore.js` renderItems / `index.html` `.mm-*`)
+- **배경**: 일부 코너(테이크아웃 등)만 이미지가 보이고 중식·석식은 안 보인다는 사용자 지적을 조사한 결과, **파싱 버그나 데이터 부재가 아니라 벤더가 당일 중 이미지를 점진적으로 채우기 때문**임을 실측 확인했다(위 크롤러 워크플로 절 참조 — KST 10:11 수집분은 백반·스페셜 이미지가 `null`, 11:12 재조회 시 업로드됨). 코너에 따라(라면·석식 등) 끝내 `null`로 남을 수도 있다(spec §4). 이 실측 과정에서 실제 이미지 해상도도 확인했다 — 백반 1024×686(비율 1.49), 스페셜 1024×752(1.36), TAKEOUT_1 781×479(1.63), TAKEOUT_2 760×445(1.71): **비율이 코너마다 제각각**이라 고정 비율 크롭 박스를 쓰면 원본을 왜곡한다.
+- **카드 레이아웃 변경**: 기존 가로형(72×72 정사각 썸네일 + 우측 텍스트)에서 **세로형**(이미지 상단 full-bleed, 텍스트는 `.mm-body`로 하단 배치)으로 바꿔 사진으로 메뉴를 인지하기 쉽게 키웠다. 카드(`.mm-card`)는 `border-radius:16px` + `overflow:hidden`으로 이미지 모서리를 카드에 맞춰 자른다.
+- **자연 비율 렌더(크롭 없음)**: `.mm-photo { display:block; width:100%; height:auto; }` — 위 실측 비율 편차 때문에 고정 `aspect-ratio`+`object-fit:cover`를 쓰지 않고 원본 해상도 비율 그대로 렌더한다(`img` 자체가 브라우저 기본 비율 유지 렌더링을 따름).
+- **로딩 스켈레톤(레이아웃 점프 완화)**: `height:auto`인 `<img>`는 로드 전 높이가 0이라 콘텐츠가 로드 순간 아래로 튄다. `.mm-photo:not(.is-loaded) { min-height:180px; background:var(--border); }`로 로드 전 자리·배경을 잡아두고, `<img onload="this.classList.add('is-loaded')">`로 로드 완료 시 `is-loaded` 클래스를 붙여 `min-height` 제약을 해제한다 — 해제 후엔 자연 비율(`height:auto`)이 그대로 살아남아 스켈레톤이 실제 비율을 침해하지 않는다.
+- **플레이스홀더 폴백(`.mm-media-ph`)**: `imageUrl`이 없거나(`null`) `<img>` 로드가 실패하면(`onerror="this.classList.add('is-failed')"`) 외부 이미지·가짜 사진을 쓰지 않고 고정 `aspect-ratio:3/2` + `linear-gradient(135deg, var(--card-bg), var(--border))` 배경 + 🍽️ 이모지 + **"사진 없음"** 문구(`.mm-ph-emoji`/`.mm-ph-text`, `aria-label="사진 없음"`)로 대체한다(창작 금지 — 실제 사진이 아님이 사용자에게 명시된다). 문구는 애초 "이미지 준비 전"이었으나, 라면(TAKEOUT)·석식처럼 **끝내 이미지가 제공되지 않는 코너**가 있어 "준비 전"은 오지 않을 사진을 약속하는 표현이 되므로 "사진 없음"으로 정정했다.
+- **이미지 hang 타임아웃 폴백**: 이미지 요청이 응답도 에러도 없이 매달리면(CDN 지연·방화벽 drop) `onload`/`onerror`가 모두 발화하지 않아 로딩 스켈레톤이 영구히 남는다. `moremore.js`는 `renderItems()` 렌더 직후 `window.setTimeout(..., IMAGE_TIMEOUT_MS)`(`IMAGE_TIMEOUT_MS = 8000`)로 `img.mm-photo` 전체를 순회해 그때까지 `img.complete`가 `false`인 사진에 `is-failed` 클래스를 붙여 위 플레이스홀더 대체 영역으로 넘긴다.
+- **접근성(`alt`)**: `<img class="mm-photo">`의 `alt`는 빈 문자열(`alt=""`)로 둔다 — 사진 바로 아래 `.mm-name-ko`가 같은 메뉴명을 텍스트로 이미 보여주므로, 사진을 장식 이미지로 처리해 스크린리더의 메뉴명 중복 낭독을 피한다.
+- **마크업 계약(인접 형제 선택자로 표시 전환)**: `renderItems()`는 카드마다 `.mm-media-ph`를 **항상 1개** 렌더한다(사진 유무와 무관). 표시 여부는 JS 분기가 아니라 CSS가 결정한다:
+  - `<img>`가 없는 카드(imageUrl null)는 `.mm-photo` 자체가 마크업에 없으므로 `.mm-media-ph`가 기본으로 보인다.
+  - `<img>`가 있는 카드는 `.mm-photo + .mm-media-ph { display:none; }`로 평소 플레이스홀더를 숨기고, 로드 실패 시에만 `.mm-photo.is-failed { display:none; }` + `.mm-photo.is-failed + .mm-media-ph { display:flex; }`로 사진을 숨기고 플레이스홀더를 대신 띄운다.
+- **텍스트 확대**: 한글 메뉴명(`.mm-name-ko`)을 `1rem`에서 `1.2rem`으로 키워 사진 축소 없이도 메뉴 인지도를 보강했다.
+- **검증 방식(정직한 표기)**: 이 변경은 자동 오라클(`scripts/oracle-check.mjs`)에 판정 항목이 없다 — 시각적 요구(사용자 육안 확인)라 [oracle.md §2](oracle.md) "최초 수용 1회는 사람 판단 허용"에 해당한다([oracle.md §4](oracle.md) "UI/UX 변경" 행 참고).
+
 ## 모락모락 크롤러 워크플로 (`.github/workflows/moremore-fetch.yml`)
-- **스케줄**: 평일 KST 09:00 = UTC 00:00 → `cron: '0 0 * * 1-5'`(월~금) + `workflow_dispatch`(수동 실행 병행 — 즉시 갱신·디버깅용).
+- **스케줄**: GitHub Actions 예약(cron) 워크플로는 **best-effort**라 지연·드롭될 수 있음을 실측으로 확인했다 — 2026-08-26 예약분은 1시간 지연(UTC 01:02) 발동, **2026-08-27 예약분은 발동 자체가 없었다**. 단일 슬롯(평일 KST 09:00 1회, `cron: '0 0 * * 1-5'`)이면 그 날 크론이 드롭되는 순간 하루 종일 갱신 기회가 사라진다. 그래서 평일 KST **07:13/08:29/09:41/10:07/11:23/12:37/13:51/15:17/17:33 9슬롯**으로 다중화한다(`workflow_dispatch` 유지 — 즉시 갱신·디버깅용). 분(minute)까지 슬롯마다 흩은 이유는 드롭의 주원인이 **정시 직후 큐 폭주**라, 같은 분(예: 전부 `:05`)에 몰아두면 드롭이 서로 상관돼 다중화 효과가 줄기 때문이다. 오후 슬롯(15:17/17:33)이 있는 이유는 벤더가 당일 중 이미지·메뉴명을 점진적으로 채우기 때문(실측: 2026-08-27 10:11 수집분은 이미지가 `null`, 11:12 재조회 시 업로드돼 있었음) — 오전 슬롯이 텍스트만 있는 응답을 저장해도 오후 슬롯이 이미지 채워진 응답으로 갱신한다.
 - **권한**: 워크플로 상단에 `permissions: contents: write`를 명시한다. 레포 기본 워크플로 토큰 권한이 read이므로, 이 워크플로가 `data/moremore-latest.json`을 커밋하려면 명시적으로 write를 열어야 한다.
+- **동시 실행 방어**: 슬롯이 9개로 늘면서 겹쳐 도는 실행(지연 발동 + 다음 슬롯 정시 발동, 또는 수동 `workflow_dispatch`)이 가능해졌다. `concurrency: { group: moremore-fetch, cancel-in-progress: false }`로 직렬화한다(`cancel-in-progress: false`인 이유: 진행 중인 수집을 죽이면 그날의 유일한 성공 슬롯을 날릴 수 있어서). 커밋 스텝의 `git push` 직전에 `git pull --rebase`를 추가해, 체크아웃 이후 다른 슬롯·사람이 먼저 push했을 때의 non-fast-forward 실패를 방지한다. **주의**: 이 `git pull --rebase`가 리베이스 충돌로 실패하면 그 슬롯의 수집분은 커밋되지 못하고 유실된다 — 재시도 루프는 없고, 다음 슬롯이 다시 수집을 시도해 메우는 것으로만 완충된다(§8).
 - **실행 흐름**:
   1. 체크아웃
-  2. Node로 `scripts/fetch-moremore.mjs` 실행 — 위 절의 엔드포인트/요청바디로 풀무원 API를 서버사이드 fetch하고, 응답을 `{ fetchedDate, raw }` 형태로 `data/moremore-latest.json`에 씀
-  3. 변경분이 있으면(무변경일 수도 있음 — 같은 날 재실행 등) git commit + push
+  2. Node로 `scripts/fetch-moremore.mjs` 실행 — 위 절의 엔드포인트/요청바디로 풀무원 API를 서버사이드 fetch. `hasMoremoreItems`(아래)로 저장 가능한 항목이 있는지만 판정하고, 있으면 기존 파일 내용과 무관하게 `{ fetchedDate, raw }` 형태로 `data/moremore-latest.json`에 쓴다. 없으면(빈/스키마 깨진 응답) 파일을 건드리지 않되, 워크플로 자체를 실패시킬지는 `MOREMORE_STRICT`(아래 실패 신호 절)로 슬롯마다 다르게 판정한다
+  3. `git add` + `git diff --staged --quiet`가 바이트 동일 응답(내용 변화 없음)이면 커밋을 막는다 → 변경분이 있을 때만 commit, `git pull --rebase` 후 push
+- **저장 게이트 — `hasMoremoreItems`(단일 판정으로 축소)**: 애초 "하루 1커밋"을 위해 `shouldReplaceMoremoreData(existing, incoming, todayDate)`(기존 파일 내용·오늘 날짜까지 비교)를 두었으나, 위 3단계의 `git diff --staged --quiet`가 **바이트 동일 응답의 중복 커밋을 이미 막고 있어** 그 판정이 실질적으로 기여하는 가치가 없었다. 오히려 "기존이 오늘 데이터면 갱신 생략" 규칙 때문에 **부분 게시 결함**이 있었다 — 이른 슬롯이 1코너만 받아 먼저 커밋하면, 뒤 슬롯이 5코너 확정 메뉴를 받아와도 "오늘자 데이터가 이미 있다"는 이유로 반영되지 못했다. 그래서 `lib/core.js`의 순수 함수 `hasMoremoreItems(raw)`로 축소·개명했다 — 판정 기준은 하나뿐이다: **응답(`raw`)에 저장할 수 있는 항목이 최소 1개라도 있는가**(`parseMoremoreResponse`와 동일한 항목 판정: 배열 행 + `row[1]`이 비어있지 않은 문자열). 기존 파일이나 오늘 날짜는 보지 않으므로 인자에서 뺐다. **이 게이트는 "저장할지"만 판정하며, "워크플로를 실패시킬지"는 아래 실패 신호 절이 별도로 판정한다.**
+
+  | incoming(raw) | `hasMoremoreItems` | 저장 동작 | 이유 |
+  |---|---|---|---|
+  | `data` 없음/빈 배열/스키마 깨짐(유효 행 0개) | `false` | 파일 유지(워크플로 실패 여부는 아래 실패 신호 절 참조) | 있는 데이터를 빈/이상 응답으로 되돌리지 않는다(창작 금지의 역방향 보호) |
+  | 유효 행 1개 이상(코너 수 무관, 1코너든 5코너든) | `true` | 기존 파일 내용과 무관하게 저장 | 부분 게시도 최신 응답이 정답이므로 항상 반영(코너 수 증감 모두 허용) — 실제 중복 커밋 방지는 `git diff --staged --quiet`가 담당 |
+
+- **실패 신호 — `MOREMORE_STRICT` + `readStoredFetchedDate()`(당일 마지막 슬롯으로 한정)**: 처음에는 `hasMoremoreItems`가 `false`이면(빈/이상 응답) 슬롯과 무관하게 매번 `process.exitCode = 1`로 워크플로를 실패시켰다. 그런데 벤더가 당일 중 데이터를 점진적으로 채우므로(§ 위 스케줄) **이른 슬롯(07:13/08:29 등)의 빈 응답은 "아직 미게시"라는 정상 상태일 수 있다** — 매번 실패로 띄우면 평일마다 빨간 잡이 슬롯 수만큼 쌓여 "빨간 워크플로 = 이상 신호"라는 전제 자체가 죽는다(경보 피로). 그래서 실패 판정을 **당일 마지막 슬롯으로 한정**했다.
+  - 워크플로가 환경변수 `MOREMORE_STRICT`를 주입한다 — `github.event.schedule == '33 8 * * 1-5'`(KST 17:33 슬롯)일 때만 `'1'`, 그 외 슬롯과 `workflow_dispatch`는 `'0'`.
+  - `scripts/fetch-moremore.mjs`의 `readStoredFetchedDate()`는 이미 저장된 `data/moremore-latest.json`의 `fetchedDate`만 읽는다 — **"저장 여부"를 게이트하기 위해서가 아니라(그 역할은 위 `hasMoremoreItems`가 이미 담당) "당일 마지막 슬롯이 실패인지"를 판정하기 위한 읽기**다(파일 부재·파싱 실패 등 어떤 이유로 못 읽어도 `null`로 "미확보"로 간주).
+  - `hasMoremoreItems(raw)`가 `false`일 때: `MOREMORE_STRICT !== '1'`이면 아무 것도 하지 않는다(파일 유지, 워크플로 성공). `MOREMORE_STRICT === '1'`이면 `isFreshMoremoreData(readStoredFetchedDate(), today)`로 **오늘 데이터를 앞선 슬롯이 이미 확보해뒀는지**를 확인해, 확보했다면 실패로 보지 않고(마지막 슬롯의 빈 응답은 "이미 끝난 하루"일 뿐), 확보하지 못했다면 그제서야 `process.exitCode = 1`로 실패시킨다.
+  - 즉 실패 신호의 의미가 "이 슬롯이 빈 응답을 받았다"에서 **"하루가 끝났는데 오늘 데이터를 끝내 확보하지 못했다"**로 정밀해졌다.
+  - **트레이드오프(갱신)**: 빈 응답을 워크플로 실패로 잡는 한, **실제로 메뉴가 없는 공휴일에는 여전히 워크플로가 붉게 뜬다.** 다만 실패 판정이 당일 마지막 슬롯 1개로 한정되면서 **공휴일 오탐이 하루 최대 1건**으로 줄었다(이전엔 9슬롯 전부가 매번 오탐이었다). 능동 알림(Slack 등)이 없는 이 프로젝트에서 "빨간 워크플로"가 유일한 이상 탐지 수단이므로, 남은 공휴일 오탐(하루 1건)은 감수하고 정직한 신호를 우선했다.
 - **기존 진단용 워크플로와의 관계**: `.github/workflows/verify-moremore-fetch.yml`(Actions 러너에서 서버사이드 호출이 실제로 되는지 1회성으로 확인한 진단 워크플로, `workflow_dispatch`만·커밋 없음)은 위 CORS 실증 배경조사에 쓰였다. `moremore-fetch.yml`은 이를 대체하는 **운영용** 예약 워크플로다(스케줄 + 실제 데이터 커밋까지 포함).
+- **미해결(§8 참조)**: `workflow_dispatch`를 KST 00:0x 근처(자정 경계)에 수동 실행하면 `getKstYyyymmdd()`는 새 날짜를 반환하지만 벤더 API는 아직 어제 메뉴를 줄 수 있다 — 응답 안의 날짜와 요청 날짜를 대조하지 않으므로 어제 메뉴에 오늘 날짜 라벨이 붙어 커밋될 수 있다(예약 슬롯은 **07:13~17:33**이라 이 경로에 해당하지 않는다). 저장 게이트(`hasMoremoreItems`)는 "항목이 1개 이상이면 항상 저장"만 판정해 날짜 자체는 보지 않으므로, 이 경로에는 저장 단계의 방어막이 없다.
 
 ## 점심메뉴 월드컵(탭3)
 - 참가 16개, 16강(8경기)→8강(4경기)→4강(2경기)→결승(1경기), 총 15경기.
@@ -220,3 +250,4 @@ window.LUNCH_CONFIG = {
 - **월드컵 결정성** — 주입 가능 rng로 16개 추출 시 같은 시드에서 같은 참가 풀이 재현되는가.
 - **후보 부족 처리** — 유효 힌트 보유 후보가 16개 미만일 때 지어내지 않고 안내되는가.
 - **탭1 재사용** — `hasSearchedOnce && candidates.length > 0`일 때 월드컵이 Kakao 검색을 다시 호출하지 않고 `window.__lunchTab1`의 후보를 그대로 쓰는가.
+- **모락모락 카드 사진**(수동/육안 확인 — 자동 오라클 없음) — 사진이 원본 비율로 크롭 없이 렌더되는가, 사진 부재·로드 실패(이미지 hang 타임아웃 포함) 시 "사진 없음" 플레이스홀더로 폴백하는가.
