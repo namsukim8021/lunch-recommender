@@ -1,0 +1,16 @@
+# 임시 진단 워크플로 — 모락모락 이미지 소스 조사용. 조사 완료 후 삭제한다.
+# (전례: verify-moremore-fetch.yml — CORS 실측 후 삭제)
+name: probe-moremore-images
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: node scripts/probe-moremore-images.mjs
