@@ -3,35 +3,42 @@
 // 순수 로직은 전부 lib/core.js 에서 가져온다(이 파일은 DOM/SDK/localStorage 연결부만 담당).
 
 import {
-  filterByRadius,
-  filterLunchCandidates,
   deriveMenuHint,
   selectRecommendation,
-  buildGridTiles,
-  isPageTruncated,
-  mergeGridResults,
-  geocodeAddress,
+  normalizeGeoPosition,
+  describeGeolocationError,
+  originLabel,
 } from './lib/core.js';
+import {
+  loadKakaoSdk,
+  resolveCompanyCenter,
+  collectCandidates,
+  clearTileCache,
+  TILE_CACHE_TTL_MS,
+} from './lib/places.js';
 
 const CONFIG = window.LUNCH_CONFIG || {};
 const RECENT_KEY = 'lunch_recent';
 const METRICS_KEY = 'lunch_metrics';
 const METRICS_LIMIT = 50; // 최근 50개 링버퍼(docs/plan.md 계측)
-const MAX_PAGES_PER_TILE = 3; // Kakao 검색 1건당 최대 45개(15개×3페이지) 상한
-const WALK_METERS_PER_MIN = 67; // 보행 4km/h ≈ 67m/분 근사(docs/plan.md)
-const TILE_SIZE_METERS = 400;
+const WALK_METERS_PER_MIN = 80; // 보행 4.8km/h ≈ 80m/분 근사 — 국내 "도보 1분 = 80m" 관행에 맞춤(800m ↔ 도보 10분)
+const GEO_OPTIONS = { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 }; // maximumAge로 OS 캐시 재사용(불필요한 GPS 기동 절감)
 
 const els = {};
 let kakao; // window.kakao 참조(SDK 로드 후 채움)
 let map = null;
 let marker = null;
-let center = null; // { lat, lng }
+let center = null; // { lat, lng } — 지금 추천에 쓰는 기준점
+let originMode = 'company'; // 'company' | 'geo' — 기준점이 회사인지 내 위치인지
+let companyCenter = null; // ensureCenter()로 확정된 회사 좌표(내 위치 모드에서 복귀할 때 씀)
+let geoAccuracy = null; // 그 위치의 측위 반경(m). null이면 브라우저가 알려주지 않은 것(추정하지 않는다)
 let currentRadius = CONFIG.RADIUS;
 let candidates = []; // 현재 라운드의 필터 통과 후보 목록
 let placesById = {}; // 최근 검색 결과의 id -> candidate 맵("최근 추천 보기" 이름 표시용, 창작 금지 — 모르면 모른다고 표시)
 let hasSearchedOnce = false;
 let lastCandidateCount = { before: 0, after: 0 };
 let lastSearchCalls = 0;
+let lastTileStats = { cachedTiles: 0, fetchedTiles: 0 }; // 타일 캐시 적중 계측(호출 절감 효과 확인용)
 
 // 탭3(worldcup.js)가 이미 수집된 탭1 후보를 재사용할 수 있도록 읽기전용 노출 (docs/plan.md)
 window.__lunchTab1 = {
@@ -39,6 +46,7 @@ window.__lunchTab1 = {
   get center() { return center; },
   get radius() { return currentRadius; },
   get hasSearchedOnce() { return hasSearchedOnce; },
+  get originMode() { return originMode; }, // 탭3가 기준점 변경(회사 ↔ 내 위치)을 인지할 수 있게
 };
 
 function $(id) {
@@ -50,6 +58,9 @@ function initDomRefs() {
   els.anotherBtn = $('another-btn');
   els.recentBtn = $('recent-btn');
   els.resetHistoryBtn = $('reset-history-btn');
+  els.myLocationBtn = $('my-location-btn');
+  els.appSubtitle = $('app-subtitle');
+  els.geoAccuracyNotice = $('geo-accuracy-notice');
   els.expandRadiusBtn = $('expand-radius-btn');
   els.retryWithResetBtn = $('retry-with-reset-btn');
   els.resultCard = $('result-card');
@@ -87,6 +98,14 @@ function saveRecent(ids) {
   }
 }
 
+function clearMetrics() {
+  try {
+    localStorage.removeItem(METRICS_KEY);
+  } catch (err) {
+    console.error('[lunch] 계측 초기화 실패', err);
+  }
+}
+
 function clearRecent() {
   try {
     localStorage.removeItem(RECENT_KEY);
@@ -108,45 +127,26 @@ function recordMetrics(entry) {
   }
 }
 
-// ---------- Kakao SDK 로드 ----------
-
-function loadKakaoSdk(appKey) {
-  return new Promise((resolve, reject) => {
-    if (window.kakao && window.kakao.maps) {
-      resolve(window.kakao);
-      return;
-    }
-    const script = document.createElement('script');
-    // 프로토콜 상대(//) 대신 https 명시 — index.html을 file:// 로 직접 열어 로컬 확인할 때도
-    // file://dapi.kakao.com 으로 깨지지 않도록 함(GitHub Pages 배포 시에도 https이므로 영향 없음).
-    script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${appKey}&libraries=services&autoload=false`;
-    script.onload = () => {
-      try {
-        window.kakao.maps.load(() => resolve(window.kakao));
-      } catch (err) {
-        reject(err);
-      }
-    };
-    script.onerror = () => reject(new Error('SDK_LOAD_FAILED'));
-    document.head.appendChild(script);
-  });
-}
+// ---------- 기준점 확정 (SDK 로드·지오코딩·격자 검색은 lib/places.js 공유 모듈) ----------
 
 async function ensureCenter() {
-  if (
-    CONFIG.CENTER &&
-    typeof CONFIG.CENTER.lat === 'number' &&
-    typeof CONFIG.CENTER.lng === 'number'
-  ) {
-    center = CONFIG.CENTER;
-    return;
-  }
-  const geocoderFn = (address, callback) => {
-    const geocoder = new kakao.maps.services.Geocoder();
-    geocoder.addressSearch(address, callback);
-  };
-  // 실패 시 geocodeAddress가 reject → 여기서 임의 좌표로 대체하지 않고 그대로 전파(창작 금지/D9).
-  center = await geocodeAddress(CONFIG.COMPANY_ADDRESS, geocoderFn);
+  // 실패 시 resolveCompanyCenter가 reject → 여기서 임의 좌표로 대체하지 않고 그대로 전파(창작 금지/D9).
+  companyCenter = await resolveCompanyCenter(CONFIG);
+  center = companyCenter;
+}
+
+/**
+ * navigator.geolocation.getCurrentPosition의 Promise 래퍼.
+ * 위치 기능이 없는 브라우저는 GEO_UNSUPPORTED로 reject한다(추정 좌표를 만들지 않는다).
+ */
+function getCurrentPositionAsync() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error('GEO_UNSUPPORTED'));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(resolve, reject, GEO_OPTIONS);
+  });
 }
 
 function initMap() {
@@ -155,95 +155,6 @@ function initMap() {
     center: new kakao.maps.LatLng(center.lat, center.lng),
     level: 4,
   });
-}
-
-// ---------- 후보 수집 (격자 분할 검색 → 45개 상한 완화, docs/plan.md) ----------
-
-function toCandidate(place) {
-  return {
-    id: place.id,
-    name: place.place_name,
-    category_name: place.category_name,
-    distance: Number(place.distance),
-    lat: Number(place.y),
-    lng: Number(place.x),
-    address: place.road_address_name || place.address_name || '',
-    place_url: place.place_url,
-  };
-}
-
-function categorySearchPage(tile, page) {
-  return new Promise((resolve, reject) => {
-    const places = new kakao.maps.services.Places();
-    const sw = new kakao.maps.LatLng(tile.swLat, tile.swLng);
-    const ne = new kakao.maps.LatLng(tile.neLat, tile.neLng);
-    const bounds = new kakao.maps.LatLngBounds(sw, ne);
-    places.categorySearch(
-      'FD6',
-      (data, status, pagination) => {
-        if (status === kakao.maps.services.Status.OK) {
-          resolve({ data, hasNextPage: !!(pagination && pagination.hasNextPage) });
-        } else if (status === kakao.maps.services.Status.ZERO_RESULT) {
-          resolve({ data: [], hasNextPage: false });
-        } else {
-          reject(new Error('SEARCH_FAILED'));
-        }
-      },
-      {
-        bounds,
-        location: new kakao.maps.LatLng(center.lat, center.lng),
-        page,
-      }
-    );
-  });
-}
-
-async function searchTile(tile, incrementSearchCalls) {
-  const collected = [];
-  let isEnd = true;
-  for (let page = 1; page <= MAX_PAGES_PER_TILE; page++) {
-    const { data, hasNextPage } = await categorySearchPage(tile, page);
-    incrementSearchCalls();
-    collected.push(...data);
-    isEnd = !hasNextPage;
-    if (!hasNextPage) break;
-  }
-  if (isPageTruncated({ count: collected.length, isEnd })) {
-    console.warn(
-      '[lunch] 타일 결과가 45개 상한에 근접/도달 — 후보 누락 가능성(격자 세분화 필요, D8 위반 후보)',
-      tile
-    );
-  }
-  return collected.map(toCandidate);
-}
-
-async function collectCandidates(radius) {
-  const tiles = buildGridTiles(center, radius, TILE_SIZE_METERS);
-  let searchCalls = 0;
-  const increment = () => {
-    searchCalls += 1;
-  };
-  const tileResults = await Promise.all(tiles.map((tile) => searchTile(tile, increment)));
-  const merged = mergeGridResults(tileResults);
-  const beforeCount = merged.length;
-  const withinRadius = filterByRadius(merged, radius);
-  const lunchOnly = filterLunchCandidates(withinRadius, {
-    excludeCategoryKeywords: CONFIG.EXCLUDE_CATEGORY_KEYWORDS || [],
-    excludePlaceIds: CONFIG.EXCLUDE_PLACE_IDS || [],
-    includePlaceIds: CONFIG.INCLUDE_PLACE_IDS || [],
-  });
-
-  placesById = {};
-  lunchOnly.forEach((c) => {
-    placesById[c.id] = c;
-  });
-
-  return {
-    list: lunchOnly,
-    before: beforeCount,
-    after: lunchOnly.length,
-    searchCalls,
-  };
 }
 
 // ---------- 상태 표시 ----------
@@ -260,13 +171,21 @@ function clearStatus() {
 }
 
 function setBusy(busy) {
-  [els.recommendBtn, els.anotherBtn, els.expandRadiusBtn, els.retryWithResetBtn].forEach((btn) => {
+  [
+    els.recommendBtn,
+    els.anotherBtn,
+    els.expandRadiusBtn,
+    els.retryWithResetBtn,
+    els.myLocationBtn,
+    // 검색 중 초기화가 끼면 수집 완료 시점의 write 가 방금 지운 타일을 되살린다(lib/places.js 세대 카운터와 2중 방어).
+    els.resetHistoryBtn,
+  ].forEach((btn) => {
     if (btn) btn.disabled = busy;
   });
 }
 
 function enableActions() {
-  [els.recommendBtn, els.anotherBtn, els.recentBtn, els.resetHistoryBtn].forEach((btn) => {
+  [els.recommendBtn, els.anotherBtn, els.recentBtn, els.resetHistoryBtn, els.myLocationBtn].forEach((btn) => {
     if (btn) btn.disabled = false;
   });
 }
@@ -300,7 +219,7 @@ function renderResultCard(candidate) {
     <p class="place-hint">${
       hint ? `메뉴 힌트: ${escapeHtml(hint)} (업종 기반 추정)` : '메뉴 힌트 정보 없음'
     }</p>
-    <p class="place-distance">약 ${distanceMeters}m · 도보 약 ${walkMinutes}분(근사)</p>
+    <p class="place-distance">약 ${distanceMeters}m(직선 근사) · 도보 약 ${walkMinutes}분(도보 1분=${WALK_METERS_PER_MIN}m 관행 기준 근사)</p>
     <a class="place-link" href="${escapeHtml(candidate.place_url || '#')}" target="_blank" rel="noopener noreferrer">카카오맵에서 보기</a>
     <p class="place-disclaimer">영업 여부·메뉴는 카카오맵에서 확인하세요.</p>
   `;
@@ -322,18 +241,25 @@ function renderCandidateEmpty() {
   els.candidateEmpty.hidden = false;
 }
 
-function buildHelpItems(config, radiusMeters) {
+function buildHelpItems(config, radiusMeters, mode) {
   // radiusMeters는 config.RADIUS 고정값이 아니라 "지금 실제로 검색에 쓰이는" 반경(currentRadius)을 받는다.
   // "반경 확대" 후에도 팝업 설명이 실제 동작과 어긋나지 않아야 하므로(spec §6, D4 창작 금지 정신).
-  const radius = Math.round(radiusMeters ?? config.RADIUS ?? 1000);
+  // mode도 같은 이유로 받는다 — 내 위치 기준으로 검색해놓고 "회사에서 도보 N분"이라 쓰면 거짓 표기다.
+  const radius = Math.round(radiusMeters ?? config.RADIUS ?? 800);
   const walkMinutes = Math.max(1, Math.round(radius / WALK_METERS_PER_MIN));
   const recentLimit = config.RECENT_LIMIT ?? 10;
+  // 캐시 수명·위치 재사용 시간은 상수에서 직접 계산한다(문구가 실제 동작보다 낡지 않도록).
+  const cacheHours = Math.round(TILE_CACHE_TTL_MS / 3600000);
+  const geoMaxAgeMinutes = Math.round(GEO_OPTIONS.maximumAge / 60000);
   return [
-    `회사(${config.COMPANY_ADDRESS || '등록된 주소'})에서 도보 약 ${walkMinutes}분(직선 약 ${radius}m 근사) 이내 음식점만 후보로 삼아요.`,
+    `${originLabel(mode, config.COMPANY_ADDRESS || '등록된 주소')}에서 도보 약 ${walkMinutes}분(직선 약 ${radius}m 근사) 이내 음식점만 후보로 삼아요.`,
     '술집·호프 등 야간 전용 업종은 자동으로 제외해요. (점심 영업 여부까지 100% 보장하진 못해서, 카카오맵에서 한 번 더 확인해주세요.)',
     `최근 ${recentLimit}곳은 다시 추천하지 않아요. 후보가 다 소진되면 오래된 순서부터 다시 후보에 포함돼요.`,
     '남은 후보 중에서 무작위로 한 곳을 골라드려요.',
     '메뉴 힌트는 업종(카테고리) 기반 추정이에요 — 실제 메뉴·가격·영업시간은 카카오맵 링크에서 확인해주세요.',
+    `검색 결과는 최대 ${cacheHours}시간 동안 이 기기에 저장해 다시 써요(카카오 호출을 아끼려고요). 그 사이 새로 생기거나 문 닫은 가게는 반영이 늦을 수 있어요.`,
+    `"내 위치"는 최대 ${geoMaxAgeMinutes}분 전에 확인된 위치를 그대로 쓸 수 있어요(배터리·GPS 절약). 정확도가 낮게 잡히면 화면에 알려드려요.`,
+    '추천 이력·검색 결과·사용 기록은 이 기기에만 저장되고 서버로 전송되지 않아요. "이력·캐시 초기화"를 누르면 회사 주소 좌표 캐시만 남기고 모두 지워져요.',
   ];
 }
 
@@ -341,7 +267,7 @@ let helpPreviouslyFocused = null;
 
 function openHelpModal() {
   if (els.helpModalBody) {
-    els.helpModalBody.innerHTML = buildHelpItems(CONFIG, currentRadius)
+    els.helpModalBody.innerHTML = buildHelpItems(CONFIG, currentRadius, originMode)
       .map((t) => `<li>${escapeHtml(t)}</li>`)
       .join('');
   }
@@ -382,22 +308,45 @@ function toggleRecentPanel() {
 
 // ---------- 이벤트 핸들러 ----------
 
+/**
+ * 이번 검색분 계측을 기록하고 카운터를 소비한다.
+ * 조기 반환(후보 0건) 경로에서 이 호출을 빠뜨리면 지난 검색의 searchCalls 가 다음 추천 기록에 얹힌다.
+ */
+function recordSearchMetrics(startedAt) {
+  recordMetrics({
+    elapsedMs: performance.now() - startedAt,
+    searchCalls: lastSearchCalls,
+    candidateCount: { ...lastCandidateCount },
+    ...lastTileStats,
+  });
+  lastSearchCalls = 0; // 소비했으므로 "다른 곳"(재검색 없음)에서는 0으로 기록된다
+  lastTileStats = { cachedTiles: 0, fetchedTiles: 0 };
+}
+
 async function handleRecommend() {
   setBusy(true);
   const startedAt = performance.now();
   try {
     if (!hasSearchedOnce) {
-      showStatus('회사 주변 식당을 검색하는 중...', false);
-      const result = await collectCandidates(currentRadius);
+      // 기준점이 회사가 아닐 수도 있으므로 문구도 실제 기준점을 따라간다(정직 표기).
+      showStatus(`${originMode === 'geo' ? '내 위치' : '회사'} 주변 식당을 검색하는 중...`, false);
+      const result = await collectCandidates(center, currentRadius, CONFIG);
       candidates = result.list;
+      // 이번 검색 결과로 이름 표시용 맵을 갱신("최근 추천 보기" — 모르는 id는 지어내지 않는다).
+      placesById = {};
+      candidates.forEach((c) => {
+        placesById[c.id] = c;
+      });
       lastCandidateCount = { before: result.before, after: result.after };
       lastSearchCalls = result.searchCalls;
+      lastTileStats = { cachedTiles: result.cachedTiles, fetchedTiles: result.fetchedTiles };
       hasSearchedOnce = true;
       clearStatus();
     }
 
     if (candidates.length === 0) {
       renderCandidateEmpty();
+      recordSearchMetrics(startedAt); // 후보 0건도 이번 검색 비용은 기록하고 카운터를 소비한다
       return;
     }
 
@@ -411,19 +360,13 @@ async function handleRecommend() {
 
     if (!picked) {
       renderCandidateEmpty();
+      recordSearchMetrics(startedAt);
       return;
     }
 
     saveRecent(newRecentIds);
     renderResultCard(picked);
-
-    const elapsedMs = performance.now() - startedAt;
-    recordMetrics({
-      elapsedMs,
-      searchCalls: lastSearchCalls,
-      candidateCount: { ...lastCandidateCount },
-    });
-    lastSearchCalls = 0; // 이번 검색분 계측은 소비했으므로 "다른 곳"(재검색 없음)에서는 0으로 기록
+    recordSearchMetrics(startedAt);
   } catch (err) {
     handleRuntimeError(err);
   } finally {
@@ -462,6 +405,8 @@ async function handleAnother() {
       elapsedMs,
       searchCalls: 0,
       candidateCount: { ...lastCandidateCount },
+      cachedTiles: 0,
+      fetchedTiles: 0, // 재검색이 없는 경로라 항상 0(계측 항목 형태는 통일)
     });
   } catch (err) {
     handleRuntimeError(err);
@@ -470,8 +415,101 @@ async function handleAnother() {
   }
 }
 
+/**
+ * 기준점 관련 UI를 한 곳에서 갱신한다(버튼 라벨·상태, 헤더 문구).
+ * 헤더까지 함께 바꾸는 이유: "회사 주변에서 골라드려요"가 내 위치 모드에서도 남아 있으면 거짓 표기다.
+ */
+function updateOriginUi() {
+  if (els.myLocationBtn) {
+    // 토글 버튼의 접근 가능한 이름은 상태에 따라 바꾸지 않는다(WAI-ARIA APG).
+    // 라벨을 "🏢 회사 기준"으로 뒤집으면 aria-pressed=true 와 합쳐져 "회사 기준 버튼, 눌림"으로 낭독돼
+    // 실제 상태(내 위치 활성)와 정반대가 된다. 라벨은 고정하고 상태는 aria-pressed + .is-active 로만 전달한다.
+    els.myLocationBtn.classList.toggle('is-active', originMode === 'geo');
+    els.myLocationBtn.setAttribute('aria-pressed', originMode === 'geo' ? 'true' : 'false');
+  }
+  if (els.appSubtitle) {
+    // 헤더는 공간 제약상 짧은 라벨(회사 / 내 위치)만 쓴다. 정확한 주소 표기는 도움말 모달의
+    // originLabel 이 담당한다 — 여기서 잡아야 할 거짓은 "기준점이 바뀌었는데 회사라고 말하는 것"이지
+    // 주소를 안 쓰는 것이 아니다(모바일 우선: 주소를 넣으면 문구가 2줄로 감긴다).
+    const shortOriginLabel = originMode === 'geo' ? '내 위치' : '회사';
+    els.appSubtitle.textContent = `${shortOriginLabel} 주변에서, 최근이랑 안 겹치게 골라드려요`;
+  }
+  updateGeoAccuracyNotice();
+}
+
+/**
+ * 측위 정확도가 추천 반경보다 낮을 때 띄우는 상시 배지.
+ * 상태줄(status-msg)에 쓰면 ① 검색 실패 안내를 덮어쓰고 ② "다른 곳" 한 번에 사라져 고지가 유지되지 않는다.
+ * 내 위치 모드인 동안 계속 떠 있고, 회사 기준으로 돌아가면 사라진다.
+ */
+function updateGeoAccuracyNotice() {
+  if (!els.geoAccuracyNotice) return;
+  const lowAccuracy =
+    originMode === 'geo' && Number.isFinite(geoAccuracy) && geoAccuracy > currentRadius;
+  els.geoAccuracyNotice.hidden = !lowAccuracy;
+  if (lowAccuracy) {
+    els.geoAccuracyNotice.textContent = `현재 위치 정확도가 ±${Math.round(
+      geoAccuracy
+    )}m로 낮아(추천 반경 ${Math.round(
+      currentRadius
+    )}m) 추천이 부정확할 수 있어요. "📍 내 위치"를 다시 누르면 회사 기준으로 돌아갑니다.`;
+  }
+}
+
+/**
+ * 기준점 토글. 회사 기준 ↔ 내 위치 기준을 오가며, 어느 쪽이든 실패하면 회사 기준을 그대로 유지한다.
+ * 위치를 못 얻었을 때 좌표를 추정해 넣지 않는다(창작 금지/D9).
+ */
+async function handleMyLocation() {
+  setBusy(true);
+  try {
+    if (originMode === 'geo') {
+      // 회사 기준으로 복귀 — 이미 확정된 회사 좌표를 쓰므로 위치 권한을 다시 묻지 않는다.
+      originMode = 'company';
+      center = companyCenter;
+      geoAccuracy = null;
+      updateOriginUi();
+      hasSearchedOnce = false;
+      candidates = [];
+      if (map && kakao && center) map.setCenter(new kakao.maps.LatLng(center.lat, center.lng));
+      // 여기서 상태 문구를 쓰지 않는다 — 바로 이어지는 handleRecommend() 가 검색 문구로 덮어쓰기 때문.
+      await handleRecommend();
+      return;
+    }
+
+    showStatus('현재 위치를 확인하는 중...', false);
+    const position = await getCurrentPositionAsync();
+    const coords = normalizeGeoPosition(position);
+    if (!coords) {
+      // 좌표가 유효하지 않으면 지어내지 않고 회사 기준 그대로 둔다.
+      showStatus(describeGeolocationError(undefined), true);
+      return;
+    }
+    geoAccuracy = coords.accuracy;
+    center = { lat: coords.lat, lng: coords.lng };
+    originMode = 'geo';
+    updateOriginUi();
+    hasSearchedOnce = false;
+    candidates = [];
+    if (map && kakao) map.setCenter(new kakao.maps.LatLng(center.lat, center.lng));
+    // 측위 반경이 추천 반경보다 크면(데스크톱 WiFi/IP 측위는 ±20km도 나온다) 전환은 진행하되
+    // updateOriginUi() 안의 상시 배지로 고지한다 — 상태줄은 검색 진행·실패 안내 전용으로 남긴다.
+    await handleRecommend();
+  } catch (err) {
+    console.error('[lunch] 내 위치 확인 실패', err);
+    const message =
+      err && err.message === 'GEO_UNSUPPORTED'
+        ? '이 브라우저는 위치 기능을 지원하지 않습니다. 회사 기준 추천을 유지합니다.'
+        : describeGeolocationError(err && err.code);
+    showStatus(message, true); // originMode는 바꾸지 않는다 — 회사 기준 추천은 계속 동작한다.
+  } finally {
+    setBusy(false);
+  }
+}
+
 async function handleExpandRadius() {
   currentRadius = currentRadius * 1.5;
+  updateGeoAccuracyNotice(); // 반경이 커지면 저정확도 판정(accuracy > currentRadius)이 달라진다
   hasSearchedOnce = false;
   showStatus(`반경을 약 ${Math.round(currentRadius)}m로 확대하여 다시 검색합니다...`, false);
   await handleRecommend();
@@ -484,10 +522,15 @@ async function handleRetryWithReset() {
 
 function handleResetHistory() {
   clearRecent();
+  // 타일 캐시 키는 절대 좌표라 "사용자가 있던 위치"가 남는다 — 사용자가 명시적으로 지울 수단을 준다.
+  // 자동 삭제가 아니라 버튼을 누를 때만 지우므로 호출 절감 효과는 유지된다.
+  clearTileCache();
+  // 계측(lunch_metrics)도 사용자 데이터다(시각·소요시간 기록) — 도움말이 "지워져요"라고 말하는 범위에 포함.
+  clearMetrics();
   if (els.recentPanel && !els.recentPanel.hidden) {
     els.recentList.innerHTML = '<li>최근 추천 이력이 없습니다.</li>';
   }
-  showStatus('추천 이력을 초기화했습니다.', false);
+  showStatus('추천 이력·검색 결과·사용 기록을 초기화했습니다.', false);
 }
 
 function handleRuntimeError(err) {
@@ -504,6 +547,7 @@ function bindEvents() {
   if (els.anotherBtn) els.anotherBtn.addEventListener('click', handleAnother);
   if (els.recentBtn) els.recentBtn.addEventListener('click', toggleRecentPanel);
   if (els.resetHistoryBtn) els.resetHistoryBtn.addEventListener('click', handleResetHistory);
+  if (els.myLocationBtn) els.myLocationBtn.addEventListener('click', handleMyLocation);
   if (els.expandRadiusBtn) els.expandRadiusBtn.addEventListener('click', handleExpandRadius);
   if (els.retryWithResetBtn)
     els.retryWithResetBtn.addEventListener('click', handleRetryWithReset);
@@ -557,6 +601,7 @@ async function bootstrap() {
     kakao = await loadKakaoSdk(CONFIG.KAKAO_JS_KEY);
     await ensureCenter();
     initMap();
+    updateOriginUi();
     clearStatus();
     enableActions();
   } catch (err) {

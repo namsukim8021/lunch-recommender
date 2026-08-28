@@ -184,6 +184,18 @@
     color: var(--error-text);
   }
 
+  /* 저정확도 고지: 상태줄과 달리 조건이 유지되는 동안 계속 떠 있는 배지 */
+  .geo-notice {
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--error-text);
+    background: var(--error-bg);
+    color: var(--error-text);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    margin: 0 0 14px;
+  }
+
   .card {
     background: var(--card-bg);
     border: 1px solid var(--border);
@@ -315,6 +327,13 @@
     background: var(--card-bg);
     color: var(--text);
     cursor: pointer;
+  }
+
+  /* 지금 "내 위치" 기준으로 추천 중임을 나타내는 활성 상태 */
+  .secondary-btn.is-active {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--accent-text);
   }
 
   footer {
@@ -531,7 +550,7 @@
       <h1>🍚 오늘 점심 추천</h1>
       <button id="help-btn" class="help-btn" type="button" aria-haspopup="dialog" aria-controls="help-modal" aria-label="추천 로직 설명 보기">?</button>
     </div>
-    <p>회사 주변에서, 최근이랑 안 겹치게 골라드려요</p>
+    <p id="app-subtitle">회사 주변에서, 최근이랑 안 겹치게 골라드려요</p>
   </header>
 
   <nav id="tab-bar" class="tab-bar">
@@ -544,6 +563,8 @@
   <button id="recommend-btn" class="primary-btn" type="button" disabled>🍚 오늘 점심 추천</button>
 
   <div id="status-msg" class="status-msg" hidden></div>
+
+  <p id="geo-accuracy-notice" class="geo-notice" role="status" hidden></p>
 
   <section class="card" id="result-card" hidden></section>
 
@@ -563,9 +584,10 @@
 
   <footer>
     <div class="btn-row">
+      <button id="my-location-btn" class="secondary-btn" type="button" aria-pressed="false" disabled>📍 내 위치</button>
       <button id="another-btn" class="secondary-btn" type="button" disabled>다른 곳</button>
       <button id="recent-btn" class="secondary-btn" type="button" disabled>최근 추천 보기</button>
-      <button id="reset-history-btn" class="secondary-btn" type="button" disabled>이력 초기화</button>
+      <button id="reset-history-btn" class="secondary-btn" type="button" disabled>이력·캐시 초기화</button>
     </div>
 
     <div class="recent-panel card" id="recent-panel" hidden>
@@ -596,6 +618,7 @@
 
   <section id="tab3-panel" class="tab-panel" hidden>
     <p id="worldcup-status" class="status-msg" role="status" hidden></p>
+    <p id="worldcup-origin" class="place-disclaimer" hidden></p>
     <section id="worldcup-insufficient" class="card" hidden>
       <p><strong>대표 메뉴가 16개 미만입니다</strong></p>
       <p>반경을 넓히면 더 많은 메뉴가 모여요.</p>

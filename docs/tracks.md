@@ -91,6 +91,16 @@ Probabilistic  분포를 비교하려면          → 수천 번 반복 실행 �
 
 탭1(기존 오늘 점심 추천)이 이미 열어 둔 Regression·Probabilistic·Signal 트랙의 전제(난수원 주입 `pickRandom(list, rng)`, `elapsedMs`/`searchCalls`/`candidateCount` 계측)는 이번 확장으로 **깨지지 않는다** — `app.js`에는 getter 노출 한 줄만 추가되고 기존 로직은 무수정이며, 월드컵의 16개 추출도 주입 가능 `rng`를 쓰므로(plan.md 테스트 관점의 "월드컵 결정성" 항목) 탭1의 결정성 설계와 같은 원칙을 따른다. 즉 이번 확장은 기존 세 트랙을 닫지 않고, 새 Extension 판정 하나를 여는 변경이다.
 
+### 3-4. 반경 800m·내 위치 버튼·Kakao 호출 절감(Phase 6.0) — Extension + Signal + 상시 도메인 안전망
+
+이번 변경은 성격이 다른 세 가지가 섞여 있어, 하나의 트랙이 아니라 **[oracle.md §4](oracle.md) 판정표 그대로 세 갈래**로 나눠 본다.
+
+- **반경 800m/도보 10분 조정 · "내 위치" 버튼**: 둘 다 `spec §4/§6`의 값·요구가 바뀌거나 늘어난 것이므로 **Extension**(`A + α vs Spec`)이다. 레퍼런스는 갱신된 `spec §6` AC([oracle.md §1①](oracle.md) 미러)와 신설 도메인 D21(위치정보 창작 금지)이다. `RADIUS`/`WALK_MINUTES`처럼 **기존 동작이 이미 있던 값을 바꾼 것**이라는 점에서 [oracle.md §4](oracle.md)의 "기존 로직 수정(동작이 바뀜)" 행에도 해당한다 — 다만 이 레포는 아직 Phase 5 구현의 golden이 박제된 적이 없는 **콜드 스타트**([oracle.md §2](oracle.md))이므로, "Extension → (수용) → Regression" 화살표에서 지금은 Extension 쪽에 있다. 즉 이번 변경은 (아직 없던) golden과 비교하는 게 아니라 갱신된 스펙과 비교해서 판정한다.
+- **Kakao API 호출 절감(타일/지오코딩 캐시·프루닝·in-flight dedupe·거리 재계산)**: [oracle.md §4](oracle.md)의 "성능·호출량 영향 변경" 행 그대로 **Signal**이다. 이번에 `recordMetrics`에 `cachedTiles`/`fetchedTiles`를 추가해 관측점을 넓혔지만(plan.md 계측 절), 이 레포는 여전히 배포 후 실사용 베이스라인이 없다([tracks.md §3-2](#3-2-signal은-관측점이-없다는-형태로-막힌다)의 결론이 그대로 이어짐) — 그래서 지금 하는 일도 **σ(A) vs σ(A′) 비교가 아니라 관측점을 하나 더 늘리는 것**이다. 다만 D22(타일 캐시 정합성)가 "캐시를 켜도 후보 집합이 달라지지 않는다"를 상시 보장하므로, 호출 절감이 정확성을 깎아 먹는 지름길이 아님은 Signal이 아니라 **도메인 오라클**이 담보한다.
+- **위치정보 실패 처리(권한 거부/확인 불가/시간 초과/미지원)**: 시나리오 자체는 `spec §6` AC로 판정하는 Extension이지만, "좌표를 지어내지 않는다"는 성질은 스펙에 없는 경로에서도 항상 성립해야 하므로 **도메인 오라클 D21**이 상시 안전망으로 깔린다 — [oracle.md §2](oracle.md)의 "도메인 오라클은 특정 변경의 트랙이 아니라 모든 트랙에서 상시 켜져 있어야 하는 안전망"이라는 원칙 그대로다.
+
+D17~D20(+D19b)·D22~D31(원 밖 타일 프루닝 무손실·스냅 격자 커버리지·스냅 격자 캐시 키 재사용(+앵커 대역 경계 회귀)·거리 계산 기준점 독립성·타일 캐시 정합성·캐시 스키마 무오염·TTL 만료 재수집+in-flight dedupe·evictOldestTiles 경계 계약·부분 실패 시 성공분 보존·SDK 싱글턴 순서·dedupe 키 반올림·지오코딩 캐시 전체 계약·다중페이지/ZERO_RESULT/용량초과·앵커 대역 경계 통과 시 캐시 미공유 박제)도 같은 이유로 전용 트랙이 없다 — Extension이 열려 있든 Signal이 관측 중이든, 이 불변식들은 항상 켜져 있어야 한다. 2차 적대적 리뷰를 끝으로 Phase 6.0 코드·오라클(D17~D31)은 확정됐다(`node scripts/oracle-check.mjs` 34 passed / 0 failed / 0 skipped, 2회 실행 동일).
+
 ## 4. 변경 시 — 어떤 트랙으로 판정하나
 
 [oracle.md §4](oracle.md)의 오라클 선택 표에 대응하는 트랙 열이다.

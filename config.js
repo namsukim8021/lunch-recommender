@@ -4,8 +4,8 @@ window.LUNCH_CONFIG = {
   KAKAO_JS_KEY: "6122c5bb23958f7b7f90838499ccb923",
   COMPANY_ADDRESS: "서울특별시 성동구 아차산로13길 11",
   CENTER: null,
-  WALK_MINUTES: 15,
-  RADIUS: 1000,
+  WALK_MINUTES: 10, // 참고값(코드 미사용 — 실제 계산은 app.js WALK_METERS_PER_MIN)
+  RADIUS: 800,
   RECENT_LIMIT: 10,
   EXCLUDE_CATEGORY_KEYWORDS: ["술집","호프","바(BAR)","포장마차","요리주점","이자카야","야식"],
   EXCLUDE_PLACE_IDS: [],
