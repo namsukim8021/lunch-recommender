@@ -197,12 +197,15 @@
     "srchCurDay": "20261019",
     "yoil": "월",
     "closeGb": "0",
-    "rptLoginGb": "0",
+    "rptLoginGb": "1",
     "surveyData": [],
     "pickupData": [],
     "rezTimeInfoData": [],
-    "aiMenuUseGb": null,
-    "aiMenuOrderByGb": null,
+    "aiMenuUseGb": [
+      "0",
+      "0"
+    ],
+    "aiMenuOrderByGb": "",
     "userInfoData": [],
     "pamKitUserResult": null,
     "groupMenuAry": [
